@@ -40,7 +40,9 @@ def test_rollout_mppe_excludes_invalid_worlds(non_finite_worlds):
         with pytest.raises(ValueError, match="finite world"):
             score_rollout(rollout, TrackingThresholds())
     else:
-        assert score_rollout(rollout, TrackingThresholds()).mppe_cm == pytest.approx(2.0)
+        result = score_rollout(rollout, TrackingThresholds())
+        assert result.mppe_cm == pytest.approx(2.0)
+        assert result.mean_per_point_error_cm == pytest.approx(2.0)
 
 
 @pytest.mark.parametrize(
@@ -222,3 +224,62 @@ def test_reference_success_requires_reaching_reference_end():
 
     assert metrics.reference_end_fraction == 0.5
     assert metrics.success_rate == 0.5
+
+
+def test_evaluation_code_sha256_is_stable_and_covers_every_scoring_module(tmp_path):
+    import hashlib
+    from pathlib import Path
+
+    from flash_chord.evaluation import harness
+    from flash_chord.evaluation.harness import evaluation_code_sha256
+
+    digest = evaluation_code_sha256()
+    assert len(digest) == 64
+    assert digest == evaluation_code_sha256()
+
+    directory = Path(harness.__file__).resolve().parent
+    expected = hashlib.sha256()
+    for name in sorted(harness._EVALUATION_CODE_MODULES):
+        expected.update(name.encode())
+        expected.update(b"\0")
+        expected.update((directory / name).read_bytes())
+    assert digest == expected.hexdigest()
+    assert "metrics.py" in harness._EVALUATION_CODE_MODULES
+
+
+def test_evaluation_provenance_identifies_the_run(tmp_path):
+    from flash_chord.evaluation.harness import evaluation_provenance
+
+    checkpoint = tmp_path / "checkpoint"
+    checkpoint.write_bytes(b"weights")
+    script = tmp_path / "evaluate_policy.py"
+    script.write_text("# entry point\n")
+
+    provenance = evaluation_provenance(
+        checkpoint=checkpoint,
+        parquet="/workspace/data/chunk-000/episode_000011.parquet",
+        eval_script=script,
+    )
+
+    import hashlib
+
+    assert provenance["checkpoint_sha256"] == hashlib.sha256(b"weights").hexdigest()
+    assert provenance["eval_script_sha256"] == hashlib.sha256(script.read_bytes()).hexdigest()
+    assert provenance["episode_index"] == "11"
+    assert provenance["reference_parquet"].endswith("episode_000011.parquet")
+    assert len(provenance["eval_code_sha256"]) == 64
+
+
+def test_evaluation_provenance_omits_what_it_cannot_determine(tmp_path):
+    from flash_chord.evaluation.harness import evaluation_provenance
+
+    checkpoint = tmp_path / "checkpoint"
+    checkpoint.write_bytes(b"weights")
+
+    provenance = evaluation_provenance(
+        checkpoint=checkpoint, parquet="motion.parquet", eval_script=tmp_path / "absent.py"
+    )
+
+    assert "eval_script_sha256" not in provenance
+    assert "episode_index" not in provenance
+    assert provenance["checkpoint_sha256"]

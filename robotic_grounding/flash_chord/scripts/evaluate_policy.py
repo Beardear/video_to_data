@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import os
+from pathlib import Path
 
 os.environ.setdefault("XLA_PYTHON_CLIENT_PREALLOCATE", "false")
 
@@ -47,6 +48,9 @@ def publish_summary(cfg: DictConfig, scalars: dict[str, float], environment_step
 def main(cfg: DictConfig) -> None:
     """Rebuild the saved experiment from its checkpoint and score one evaluation cohort."""
     evaluation = instantiate_typed(cfg.evaluation, EvaluationConfig)
+    object_trajectories_output = (
+        resolve_path(evaluation.object_trajectories_output) if evaluation.object_trajectories_output else None
+    )
     outcome = evaluate_checkpoint(
         resolve_path(evaluation.checkpoint),
         world_count=evaluation.world_count,
@@ -55,11 +59,15 @@ def main(cfg: DictConfig) -> None:
         motion_start_frame=evaluation.motion_start_frame,
         motion_end_frame=evaluation.motion_end_frame,
         source_root=evaluation.source_root,
+        object_trajectories_output=object_trajectories_output,
+        eval_script=Path(__file__).resolve(),
     )
     scalars = evaluation_scalars(outcome)
     print(json.dumps(scalars, indent=2, sort_keys=True), flush=True)
     if evaluation.metrics_output:
         print(f"report: {write_evaluation_report(evaluation.metrics_output, outcome)}", flush=True)
+    if object_trajectories_output:
+        print(f"object trajectories: {object_trajectories_output}", flush=True)
     if evaluation.reset_mode == "explicit":
         try:
             publish_summary(cfg, scalars, outcome.environment_steps)

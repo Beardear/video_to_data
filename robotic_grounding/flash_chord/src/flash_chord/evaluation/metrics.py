@@ -100,6 +100,8 @@ class ObjectTrackingMetrics:
     spider_sr_uncentered: float
     spider_position_error_centered_m: float
     maniptrans_sr: float
+    relative_position_error_cm: float
+    mean_per_point_error_cm: float
     position_mean_centered: bool
     world_count: int
     step_count: int
@@ -293,6 +295,61 @@ def add_auc(add: np.ndarray) -> tuple[float, tuple[float, ...]]:
     return float(np.mean(per_body)), per_body
 
 
+def relative_position_error_cm(
+    achieved_pose_w: np.ndarray,
+    reference_pose_w: np.ndarray,
+    body_object_ids: np.ndarray,
+) -> float:
+    """Mean pairwise root-body position error in each first object's frame (cm).
+
+    Averages over pairs, worlds, and frames; returns 0.0 for fewer than two objects.
+    """
+    achieved, reference = _aligned_poses(achieved_pose_w, reference_pose_w)
+    object_ids = _body_object_ids(body_object_ids, achieved.shape[2])
+    roots = [int(np.flatnonzero(object_ids == oid)[0]) for oid in np.unique(object_ids)]
+    if len(roots) < 2:
+        return 0.0
+
+    errors = []
+    for index, first in enumerate(roots):
+        for second in roots[index + 1 :]:
+            rotation = _rotation_matrix(achieved[:, :, first, 3:])
+            rotation_reference = _rotation_matrix(reference[:, :, first, 3:])
+            delta = achieved[:, :, second, :3] - achieved[:, :, first, :3]
+            delta_reference = reference[:, :, second, :3] - reference[:, :, first, :3]
+            local = np.einsum("twji,twj->twi", rotation, delta)
+            local_reference = np.einsum("twji,twj->twi", rotation_reference, delta_reference)
+            errors.append(np.linalg.norm(local - local_reference, axis=-1))
+    return float(np.mean(np.stack(errors)) * 100.0)
+
+
+#: Body-frame directions of the six MPPE keypoints.
+_MPPE_KEYPOINT_DIRECTIONS = np.array(
+    [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0], [-1.0, 0.0, 0.0], [0.0, -1.0, 0.0], [0.0, 0.0, -1.0]],
+    dtype=np.float64,
+)
+
+#: MPPE keypoint radius in metres.
+MPPE_KEYPOINT_RADIUS_M = 0.05
+
+
+def mean_per_point_error_cm(
+    achieved_pose_w: np.ndarray,
+    reference_pose_w: np.ndarray,
+) -> float:
+    """Mean reference error of six body-frame keypoints per object (cm).
+
+    Averages Euclidean distances over keypoints, bodies, worlds, and frames.
+    """
+    achieved, reference = _aligned_poses(achieved_pose_w, reference_pose_w)
+    offsets = _MPPE_KEYPOINT_DIRECTIONS * MPPE_KEYPOINT_RADIUS_M
+    rotation = _rotation_matrix(achieved[..., 3:])
+    rotation_reference = _rotation_matrix(reference[..., 3:])
+    keypoints = achieved[..., None, :3] + np.einsum("...ij,kj->...ki", rotation, offsets)
+    keypoints_reference = reference[..., None, :3] + np.einsum("...ij,kj->...ki", rotation_reference, offsets)
+    return float(np.linalg.norm(keypoints - keypoints_reference, axis=-1).mean() * 100.0)
+
+
 def _per_world_pose_error(achieved: np.ndarray, reference: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     """Frame-averaged ``(W, B)`` position error in metres and orientation error in radians."""
     position = np.linalg.norm(achieved[..., :3] - reference[..., :3], axis=-1).mean(axis=0)
@@ -397,6 +454,8 @@ def compute_object_tracking_metrics(
         add_std_m=float(np.std(add)),
         add_std_per_body_m=tuple(float(np.std(add[..., body])) for body in range(add.shape[2])),
         spider_sr_uncentered=float(np.mean(spider_mask)),
+        relative_position_error_cm=relative_position_error_cm(achieved_pose_w, reference_pose_w, body_object_ids),
+        mean_per_point_error_cm=mean_per_point_error_cm(achieved_pose_w, reference_pose_w),
         spider_position_error_centered_m=float(
             np.mean(spider_centered_position_error(achieved_pose_w, reference_pose_w))
         ),

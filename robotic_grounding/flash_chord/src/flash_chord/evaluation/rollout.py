@@ -8,8 +8,11 @@ Per-step state accumulates into preallocated device buffers and is read back onc
 
 from __future__ import annotations
 
-from collections.abc import Callable
+import os
+import tempfile
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
+from pathlib import Path
 
 import numpy as np
 import warp as wp
@@ -20,6 +23,7 @@ from flash_chord.runtime.command import ObjectLayout
 from flash_chord.utils.quat import quat_rotate_xyzw, wxyz_to_xyzw
 
 _POSE_WIDTH = 7
+_TRAJECTORY_SCHEMA = "flash_chord_object_trajectories_v1"
 
 
 @dataclass(frozen=True, slots=True)
@@ -50,6 +54,154 @@ class ObjectPoseRollout:
     control_fps: float
     start_frame: int
     non_finite_worlds: tuple[int, ...]
+
+
+def _object_trajectory_schema(rollout: ObjectPoseRollout, provenance: Mapping[str, object] | None = None):
+    import pyarrow as pa
+
+    steps, worlds, bodies, width = rollout.achieved_pose_w.shape
+    metadata = {
+        b"flash_chord.schema": _TRAJECTORY_SCHEMA.encode(),
+        b"flash_chord.position_unit": b"meter",
+        b"flash_chord.quaternion_order": b"xyzw",
+        b"flash_chord.row_order": b"step,environment_id,object_body_id",
+        b"flash_chord.control_fps": str(rollout.control_fps).encode(),
+        b"flash_chord.start_frame": str(rollout.start_frame).encode(),
+        b"flash_chord.step_count": str(steps).encode(),
+        b"flash_chord.world_count": str(worlds).encode(),
+        b"flash_chord.object_body_count": str(bodies).encode(),
+        b"flash_chord.pose_width": str(width).encode(),
+    }
+    for key, value in (provenance or {}).items():
+        if value is None or str(value) == "":
+            continue
+        metadata[f"flash_chord.{key}".encode()] = str(value).encode()
+    return pa.schema(
+        [
+            pa.field("environment_id", pa.int32(), nullable=False),
+            pa.field("step", pa.int32(), nullable=False),
+            pa.field("reference_frame", pa.int32(), nullable=False),
+            pa.field("time_s", pa.float64(), nullable=False),
+            pa.field("object_id", pa.int32(), nullable=False),
+            pa.field("object_body_id", pa.int32(), nullable=False),
+            pa.field("object_body_name", pa.dictionary(pa.int32(), pa.string()), nullable=False),
+            pa.field("environment_valid", pa.bool_(), nullable=False),
+            pa.field("achieved_position_x", pa.float32(), nullable=False),
+            pa.field("achieved_position_y", pa.float32(), nullable=False),
+            pa.field("achieved_position_z", pa.float32(), nullable=False),
+            pa.field("achieved_quaternion_x", pa.float32(), nullable=False),
+            pa.field("achieved_quaternion_y", pa.float32(), nullable=False),
+            pa.field("achieved_quaternion_z", pa.float32(), nullable=False),
+            pa.field("achieved_quaternion_w", pa.float32(), nullable=False),
+            pa.field("reference_position_x", pa.float32(), nullable=False),
+            pa.field("reference_position_y", pa.float32(), nullable=False),
+            pa.field("reference_position_z", pa.float32(), nullable=False),
+            pa.field("reference_quaternion_x", pa.float32(), nullable=False),
+            pa.field("reference_quaternion_y", pa.float32(), nullable=False),
+            pa.field("reference_quaternion_z", pa.float32(), nullable=False),
+            pa.field("reference_quaternion_w", pa.float32(), nullable=False),
+        ],
+        metadata=metadata,
+    )
+
+
+def _validate_object_trajectory_rollout(rollout: ObjectPoseRollout) -> tuple[int, int, int]:
+    achieved = np.asarray(rollout.achieved_pose_w)
+    reference = np.asarray(rollout.reference_pose_w)
+    if achieved.ndim != 4 or achieved.shape[-1] != _POSE_WIDTH:
+        raise ValueError(f"achieved poses must have shape [step, world, body, 7], got {achieved.shape}")
+    steps, worlds, bodies, _ = achieved.shape
+    if reference.shape != (steps, bodies, _POSE_WIDTH):
+        raise ValueError(f"reference poses must have shape {(steps, bodies, _POSE_WIDTH)}, got {reference.shape}")
+    if np.asarray(rollout.body_object_ids).shape != (bodies,):
+        raise ValueError(
+            f"body_object_ids must have shape {(bodies,)}, got {np.asarray(rollout.body_object_ids).shape}"
+        )
+    if len(rollout.object_body_names) != bodies:
+        raise ValueError(f"object_body_names must contain {bodies} names, got {len(rollout.object_body_names)}")
+    if rollout.control_fps <= 0.0:
+        raise ValueError(f"control_fps must be positive, got {rollout.control_fps}")
+    invalid = np.asarray(rollout.non_finite_worlds, dtype=np.int64)
+    if invalid.size and (invalid.min() < 0 or invalid.max() >= worlds):
+        raise ValueError(f"non_finite_worlds must be within [0, {worlds}), got {rollout.non_finite_worlds}")
+    return steps, worlds, bodies
+
+
+def write_object_trajectories_parquet(
+    path: str | Path,
+    rollout: ObjectPoseRollout,
+    *,
+    step_chunk: int = 32,
+    provenance: Mapping[str, object] | None = None,
+) -> Path:
+    """Atomically write step-major object trajectories with Parquet provenance.
+
+    Poses use metres and xyzw quaternions; invalid worlds remain flagged.
+    """
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    if step_chunk <= 0:
+        raise ValueError(f"step_chunk must be positive, got {step_chunk}")
+    steps, worlds, bodies = _validate_object_trajectory_rollout(rollout)
+    destination = Path(path).expanduser().resolve()
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    descriptor, temporary_name = tempfile.mkstemp(
+        prefix=f".{destination.name}.", suffix=".parquet", dir=destination.parent
+    )
+    os.close(descriptor)
+    temporary = Path(temporary_name)
+    schema = _object_trajectory_schema(rollout, provenance)
+    body_ids = np.arange(bodies, dtype=np.int32)
+    world_ids = np.arange(worlds, dtype=np.int32)
+    object_ids = np.asarray(rollout.body_object_ids, dtype=np.int32)
+    valid_worlds = np.ones(worlds, dtype=np.bool_)
+    if rollout.non_finite_worlds:
+        valid_worlds[np.asarray(rollout.non_finite_worlds, dtype=np.int64)] = False
+    pose_names = (
+        "position_x",
+        "position_y",
+        "position_z",
+        "quaternion_x",
+        "quaternion_y",
+        "quaternion_z",
+        "quaternion_w",
+    )
+    try:
+        with pq.ParquetWriter(temporary, schema, compression="zstd", use_dictionary=True) as writer:
+            for begin in range(0, steps, step_chunk):
+                end = min(begin + step_chunk, steps)
+                chunk_steps = end - begin
+                row_steps = np.repeat(np.arange(begin, end, dtype=np.int32), worlds * bodies)
+                row_worlds = np.tile(np.repeat(world_ids, bodies), chunk_steps)
+                row_bodies = np.tile(body_ids, chunk_steps * worlds)
+                row_object_ids = np.tile(object_ids, chunk_steps * worlds)
+                name_indices = pa.array(row_bodies, type=pa.int32())
+                names = pa.DictionaryArray.from_arrays(name_indices, pa.array(rollout.object_body_names))
+                achieved = np.asarray(rollout.achieved_pose_w[begin:end], dtype=np.float32).reshape(-1, _POSE_WIDTH)
+                reference = np.broadcast_to(
+                    np.asarray(rollout.reference_pose_w[begin:end], dtype=np.float32)[:, None, :, :],
+                    (chunk_steps, worlds, bodies, _POSE_WIDTH),
+                ).reshape(-1, _POSE_WIDTH)
+                columns = {
+                    "environment_id": pa.array(row_worlds),
+                    "step": pa.array(row_steps),
+                    "reference_frame": pa.array(row_steps + rollout.start_frame),
+                    "time_s": pa.array(row_steps.astype(np.float64) / rollout.control_fps),
+                    "object_id": pa.array(row_object_ids),
+                    "object_body_id": pa.array(row_bodies),
+                    "object_body_name": names,
+                    "environment_valid": pa.array(valid_worlds[row_worlds]),
+                }
+                for index, name in enumerate(pose_names):
+                    columns[f"achieved_{name}"] = pa.array(achieved[:, index])
+                    columns[f"reference_{name}"] = pa.array(reference[:, index])
+                writer.write_table(pa.Table.from_pydict(columns, schema=schema))
+        temporary.chmod(0o644)
+        os.replace(temporary, destination)
+    finally:
+        temporary.unlink(missing_ok=True)
+    return destination
 
 
 @wp.kernel

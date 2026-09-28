@@ -12,6 +12,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import tempfile
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass, is_dataclass, replace
@@ -28,9 +29,14 @@ from flash_chord.evaluation.metrics import (
     ObjectTrackingMetrics,
     TrackingThresholds,
     compute_object_tracking_metrics,
+    mean_per_point_error_cm,
     object_mppe_cm,
 )
-from flash_chord.evaluation.rollout import ObjectPoseRollout, record_object_pose_rollout
+from flash_chord.evaluation.rollout import (
+    ObjectPoseRollout,
+    record_object_pose_rollout,
+    write_object_trajectories_parquet,
+)
 from flash_chord.lifecycle.curriculum import CurriculumStage
 from flash_chord.scene.collision import CollisionPolicy
 from flash_chord.scene.setup import setup_scene
@@ -112,6 +118,43 @@ def file_sha256(path: Path) -> str:
         for chunk in iter(lambda: stream.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+#: Modules included in the evaluation-code digest.
+_EVALUATION_CODE_MODULES = ("__init__.py", "harness.py", "metrics.py", "rollout.py")
+
+
+def evaluation_code_sha256() -> str:
+    """Hash the evaluation module names and contents."""
+    directory = Path(__file__).resolve().parent
+    digest = hashlib.sha256()
+    for name in sorted(_EVALUATION_CODE_MODULES):
+        digest.update(name.encode())
+        digest.update(b"\0")
+        digest.update((directory / name).read_bytes())
+    return digest.hexdigest()
+
+
+def evaluation_provenance(
+    *,
+    checkpoint: Path,
+    parquet: str,
+    eval_script: str | Path | None = None,
+) -> dict[str, str]:
+    """Return checkpoint, evaluator, reference, and episode provenance."""
+    provenance = {
+        "checkpoint_sha256": file_sha256(checkpoint),
+        "eval_code_sha256": evaluation_code_sha256(),
+        "reference_parquet": str(parquet),
+    }
+    if eval_script is not None:
+        script = Path(eval_script).expanduser().resolve()
+        if script.is_file():
+            provenance["eval_script_sha256"] = file_sha256(script)
+    match = re.search(r"episode_(\d+)", str(parquet))
+    if match:
+        provenance["episode_index"] = str(int(match.group(1)))
+    return provenance
 
 
 def _term_limit(termination: Mapping[str, Any], name: str) -> float | None:
@@ -323,8 +366,10 @@ def evaluate_checkpoint(
     motion_start_frame: int | None = None,
     motion_end_frame: int | None = None,
     source_root: str | Path | None = None,
+    object_trajectories_output: str | Path | None = None,
+    eval_script: str | Path | None = None,
 ) -> EvaluationOutcome:
-    """Score one actor checkpoint over ``world_count`` unassisted full-sequence attempts."""
+    """Score a checkpoint and optionally export object trajectories."""
     import jax
     import jax.numpy as jnp
 
@@ -445,11 +490,18 @@ def evaluate_checkpoint(
         score_rollout(rollout, thresholds),
         chord_sr=reference_tracking.success_rate,
     )
+    provenance = evaluation_provenance(
+        checkpoint=checkpoint_path,
+        parquet=str(cfg.task.parquet),
+        eval_script=eval_script,
+    )
+    if object_trajectories_output is not None:
+        write_object_trajectories_parquet(object_trajectories_output, rollout, provenance=provenance)
     return EvaluationOutcome(
         metrics=metrics,
         reference_tracking=reference_tracking,
         checkpoint=str(checkpoint_path),
-        checkpoint_sha256=file_sha256(checkpoint_path),
+        checkpoint_sha256=provenance["checkpoint_sha256"],
         environment_steps=int(metadata.get("environment_steps", -1)),
         parquet=str(cfg.task.parquet),
         world_count=env.world_count,
@@ -491,12 +543,15 @@ def score_rollout(rollout: ObjectPoseRollout, thresholds: TrackingThresholds) ->
         rollout.object_body_names,
     )
     if rollout.non_finite_worlds:
-        # The recorder zeroes invalid worlds; those placeholders must not contribute to MPPE.
+        # Exclude zero-filled invalid worlds from both MPPE results.
         valid = np.ones(rollout.achieved_pose_w.shape[1], dtype=np.bool_)
         valid[list(rollout.non_finite_worlds)] = False
         metrics = replace(
             metrics,
             mppe_cm=object_mppe_cm(rollout.achieved_pose_w[:, valid], rollout.reference_pose_w),
+            mean_per_point_error_cm=mean_per_point_error_cm(
+                rollout.achieved_pose_w[:, valid], rollout.reference_pose_w
+            ),
         )
     return metrics
 
@@ -597,6 +652,8 @@ def evaluation_scalars(outcome: EvaluationOutcome) -> dict[str, float]:
         "evaluation/mppe_cm": metrics.mppe_cm,
         "evaluation/add_std_m": metrics.add_std_m,
         "evaluation/spider_position_error_centered_m": metrics.spider_position_error_centered_m,
+        "evaluation/relative_position_error_cm": metrics.relative_position_error_cm,
+        "evaluation/mean_per_point_error_cm": metrics.mean_per_point_error_cm,
         "evaluation/world_count": float(outcome.world_count),
         "evaluation/environment_steps": float(outcome.environment_steps),
     }

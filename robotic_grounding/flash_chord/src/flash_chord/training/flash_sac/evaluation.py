@@ -5,9 +5,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from contextlib import nullcontext
 from dataclasses import dataclass
-from typing import Callable
 
 import jax
 import jax.numpy as jnp
@@ -36,6 +36,7 @@ class EvaluationConfig:
     motion_start_frame: int | None = None
     motion_end_frame: int | None = None
     metrics_output: str | None = None
+    object_trajectories_output: str | None = None
     source_root: str | None = None
 
     def __post_init__(self) -> None:

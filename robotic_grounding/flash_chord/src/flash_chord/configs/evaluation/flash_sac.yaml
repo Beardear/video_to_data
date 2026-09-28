@@ -9,4 +9,5 @@ reset_mode: explicit
 motion_start_frame: null
 motion_end_frame: null
 metrics_output: null
+object_trajectories_output: null
 source_root: null
