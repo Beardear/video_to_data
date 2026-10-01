@@ -1,20 +1,4 @@
-/*
- * V2D Challenge leaderboard.
- *
- * Drops into docs/v2d_challenge/ of github.com/nvidia-isaac/video_to_data. The page change is
- * two lines: a <script src="./leaderboard.js" defer></script> in <head>, and swapping the
- * "Not yet open" card inside <section id="leaderboard"> for
- *   <div id="v2d-leaderboard" data-src="<url of leaderboard.json>"></div>
- *
- * Written as plain DOM rather than as markup for the page's DC component framework. The
- * challenge page is a hand-authored 56 KB file that people edit; keeping the leaderboard in
- * its own file means a bot-refreshed table never collides with an editor's change, and the
- * rendering logic is reviewable on its own. It also means this file has no dependency on the
- * DC runtime's <sc-for> semantics.
- *
- * Data contract: see aggregate/v2d_aggregate.py. Anything the renderer needs is in the JSON,
- * so adding a metric or a track is a config change, not a code change here.
- */
+/* Render V2D Challenge standings and Kaggle metric links. */
 (function () {
   "use strict";
 
@@ -143,14 +127,24 @@
     });
 
     var tbody = el("tbody");
-    rows.forEach(function (row, index) {
+    var participantRank = 0;
+    rows.forEach(function (row) {
+      var baseline = row.is_baseline === true;
+      if (!baseline) participantRank += 1;
       var tr = el("tr", "border-bottom:1px solid " + css.border);
       var cell = "padding:14px;text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums";
 
-      tr.appendChild(el("td", cell + ";text-align:left;color:" + css.muted + ";font-family:" + css.mono, index + 1));
+      tr.appendChild(el("td", cell + ";text-align:left;color:" + css.muted + ";font-family:" + css.mono, baseline ? "—" : participantRank));
 
       var teamCell = el("td", cell + ";text-align:left;white-space:normal");
-      var name = el("div", "font-weight:500;color:" + css.ink, row.team);
+      var name = el("div", "font-weight:" + (baseline ? "400" : "500") +
+        ";color:" + (baseline ? css.muted : css.ink), row.team);
+      if (baseline) {
+        name.appendChild(el("span",
+          "display:inline-block;margin-left:8px;padding:2px 7px;border:1px solid " + css.border +
+          ";border-radius:4px;font-size:11px;font-weight:400;color:" + css.muted,
+          "Baseline"));
+      }
       teamCell.appendChild(name);
       if (row.members && row.members.length) {
         teamCell.appendChild(
@@ -172,10 +166,10 @@
 
       available.forEach(function (metric) {
         var value = num(row.scores ? row.scores[metric.key] : null);
-        var strong = state.sortKey === metric.key;
+        var strong = !baseline && state.sortKey === metric.key;
         var td = el(
           "td",
-          cell + ";color:" + (value === null ? css.muted : css.ink) +
+          cell + ";color:" + (baseline || value === null ? css.muted : css.ink) +
             (strong ? ";font-weight:600" : ""),
           fmtScore(value)
         );
@@ -197,10 +191,6 @@
       "border:1px solid " + css.border +
         ";padding:88px 40px;display:flex;flex-direction:column;align-items:center;gap:14px;text-align:center"
     );
-    card.appendChild(
-      el("div", "font-family:" + css.mono + ";font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:" +
-        css.muted, "Not yet open")
-    );
     card.appendChild(el("div", "font-size:24px;font-weight:500", message));
     if (detail) card.appendChild(el("div", "font-size:16px;color:" + css.muted + ";max-width:52ch", detail));
     return card;
@@ -209,7 +199,7 @@
   function render(mount, data, state) {
     mount.innerHTML = "";
     if (!data || !data.tracks || !data.tracks.length) {
-      mount.appendChild(renderEmpty("Leaderboards open September 21",
+      mount.appendChild(renderEmpty("No entries yet",
         "Standings appear here once submissions are scored. Track 2 is scored separately at "
         + "each of its three input tiers."));
       return;
@@ -227,7 +217,7 @@
       });
     });
     if (!tracks.length) {
-      mount.appendChild(renderEmpty("Leaderboards open September 21",
+      mount.appendChild(renderEmpty("No entries yet",
         "Standings appear here once submissions are scored. Track 2 is scored separately at "
         + "each of its three input tiers."));
       return;
@@ -282,6 +272,7 @@
       el("div", null, data.generated_at ? "Updated " + new Date(data.generated_at).toUTCString() : "")
     );
     var links = el("div", "display:flex;gap:14px;flex-wrap:wrap");
+    links.appendChild(el("span", null, "Links to live track leaderboards on Kaggle"));
     track.metrics.forEach(function (metric) {
       // Only link out when the slug really is a slug. The prefix already makes a
       // "javascript:" value inert, but refusing to build the URL at all means a typo in
@@ -300,11 +291,6 @@
     footer.appendChild(links);
     mount.appendChild(footer);
 
-    if (track.warnings && track.warnings.length) {
-      mount.appendChild(
-        el("div", "margin-top:10px;font-size:13px;color:" + css.muted, track.warnings.join(" · "))
-      );
-    }
   }
 
   function boot() {

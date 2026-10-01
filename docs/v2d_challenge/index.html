@@ -21,6 +21,7 @@
   a:hover { color: var(--color-brand, #76b900); }
   html { scroll-behavior: smooth; }
   img { max-width: 100%; }
+  #submission ol, #submission li { list-style: decimal outside; }
   @media (max-width: 860px) {
     header, section { padding-left: 20px !important; padding-right: 20px !important; }
     header { position: static !important; }
@@ -67,6 +68,7 @@
       <a href="#awards">Awards</a>
       <a href="#judges">Judges</a>
       <a href="#timeline">Timeline</a>
+      <a href="#submission">Submission</a>
       <a href="#leaderboard">Leaderboard</a>
       <a href="#more">More Than a Leaderboard</a>
       <a href="#organizers">Organizers</a>
@@ -105,9 +107,10 @@
       <a href="#awards" style="font-size: 16px; font-weight: 500; color: var(--text-color-primary); border-bottom: 1px solid var(--text-color-primary); padding-bottom: 2px;">Awards</a>
       <a href="#judges" style="font-size: 16px; font-weight: 500; color: var(--text-color-primary); border-bottom: 1px solid var(--text-color-primary); padding-bottom: 2px;">Judges</a>
       <a href="#timeline" style="font-size: 16px; font-weight: 500; color: var(--text-color-primary); border-bottom: 1px solid var(--text-color-primary); padding-bottom: 2px;">Timeline</a>
+      <a href="#submission" style="font-size: 16px; font-weight: 500; color: var(--text-color-primary); border-bottom: 1px solid var(--text-color-primary); padding-bottom: 2px;">Submission</a>
       <a href="#leaderboard" style="font-size: 16px; font-weight: 500; color: var(--text-color-primary); border-bottom: 1px solid var(--text-color-primary); padding-bottom: 2px;">Leaderboard</a>
       <a href="#more" style="font-size: 16px; font-weight: 500; color: var(--text-color-primary); border-bottom: 1px solid var(--text-color-primary); padding-bottom: 2px;">More Than a Leaderboard</a>
-      <a href="https://github.com/nvidia-isaac/video_to_data/tree/release/0.2.0/" target="_blank" rel="noopener" style="font-size: 16px; font-weight: 500; color: var(--text-color-primary); border-bottom: 1px solid var(--text-color-primary); padding-bottom: 2px;">Starter Toolkit</a>
+      <a href="https://github.com/nvidia-isaac/video_to_data/tree/main" target="_blank" rel="noopener" style="font-size: 16px; font-weight: 500; color: var(--text-color-primary); border-bottom: 1px solid var(--text-color-primary); padding-bottom: 2px;">Starter Toolkit</a>
       <a href="https://nvidia-isaac.github.io/video_to_data/v2d_corl_tutorial/" target="_blank" rel="noopener" style="font-size: 16px; font-weight: 500; color: var(--text-color-primary); border-bottom: 1px solid var(--text-color-primary); padding-bottom: 2px;">CoRL Tutorial ↗</a>
     </div>
     
@@ -248,6 +251,7 @@
           <div style="display: grid; grid-template-columns: minmax(0, 1fr); gap: 32px; margin-top: 28px;">
             <div style="display: flex; flex-direction: column; gap: 20px; max-width: 62ch;">
               <div style="font-size: 17px; line-height: 1.65; margin: 0; color: var(--text-color-secondary);"><div>Embodiment and simulator are fixed and provided: G1 + Dex3, so entries compete on retargeting and policy learning, not simulation engineering. Teams turn human demonstrations into robot policies at varying levels of noise and inaccuracy. This track identifies the tolerance of human-to-robot transfer pipelines to errors and noise from upstream reconstruction.</div></div>
+              <p style="font-size: 17px; line-height: 1.65; margin: 0; color: var(--text-color-secondary);">We have split Track 2 into 3 tiers based on the quality of the reference trajectory.</p>
               <div style="display: flex; flex-direction: column; gap: 1px; background: var(--border-color-base); border: 1px solid var(--border-color-base);">
                 <div style="background: #ffffff; padding: 16px 20px; display: grid; grid-template-columns: 92px 1fr; gap: 16px;">
                   <span style="font-family: var(--font-mono); font-size: 12px; color: var(--color-brand, #76b900);">TIER 1</span>
@@ -262,9 +266,9 @@
                   <span style="font-size: 15px;">Off-the-shelf reconstructions. Today's best practice.</span>
                 </div>
               </div>
-              <p style="font-size: 17px; line-height: 1.65; margin: 0; color: var(--text-color-secondary);">Teams will be evaluated against the clean multi-view captioned object trajectory in all three tiers. For Tiers 2 and 3, teams are encouraged to propose methods for recovering better estimates of the object trajectory using anything <strong style="color: var(--text-color-primary); font-weight: 600;">other than the clean trajectory captions provided in Tier 1</strong>. For Tier 3, video to data provides CARI4D as an off the shelf solution.</p>
+              <p style="font-size: 17px; line-height: 1.65; margin: 0; color: var(--text-color-secondary);">Teams will be evaluated against the clean multi-view captioned object trajectory in all three tiers. A valid Track 2 submission consists of a separate submission to each tier. Teams may modify their approach between tiers. For Tiers 2 and 3, teams are encouraged to propose methods for recovering better estimates of the object trajectory using anything <strong style="color: var(--text-color-primary); font-weight: 600;">other than the clean trajectory captions provided in Tier 1</strong>. For Tier 3, video to data provides CARI4D as an off the shelf solution.</p>
               <p style="font-size: 17px; line-height: 1.65; margin: 0; color: var(--text-color-secondary);"><strong style="color: var(--text-color-primary); font-weight: 600;">Submission.</strong> Teams will submit recorded evaluations of their trained policies using the eval_robotic_grounding.py script provided to produce the artifact for submission.</p>
-              <p style="font-size: 17px; line-height: 1.65; margin: 0; color: var(--text-color-secondary);"><strong style="color: var(--text-color-primary); font-weight: 600;">Evaluation.</strong> At each tier, submissions will be evaluated for object-tracking accuracy using AUC, SP-SR, MP-SR, and MPPE as defined in the CHORD manuscript. Strong performance on more challenging tiers will be weighted appropriately when awarding points.</p>
+              <p style="font-size: 17px; line-height: 1.65; margin: 0; color: var(--text-color-secondary);"><strong style="color: var(--text-color-primary); font-weight: 600;">Evaluation.</strong> At each tier, submissions will be evaluated for object-tracking accuracy using AUC, SP-SR, MP-SR, and MPPE as defined in the CHORD manuscript. Each tier is weighted equally when calculating final scores for this track.</p>
             </div>
             <div></div>
           </div>
@@ -449,14 +453,33 @@
     </div>
   </section>
 
+  <section id="submission" style="padding: 104px 48px; border-top: 1px solid var(--border-color-base);">
+    <div style="max-width: 1180px; margin: 0 auto; display: grid; grid-template-columns: 180px minmax(0, 1fr); gap: 48px;">
+      <div>
+        <h2 style="font-size: 28px; line-height: 1.1; letter-spacing: -0.02em; font-weight: 300; margin: 0; position: sticky; top: 100px;">Submission</h2>
+      </div>
+      <div style="font-size: 16px; line-height: 1.65; color: var(--text-color-secondary); max-width: 68ch;">
+        <p style="margin: 0 0 16px;">We use Kaggle to process and score leaderboard submissions, and each metric has its own Kaggle leaderboard. Submissions across all tracks are displayed below. The easiest way to submit a solution is to use the agent skill included in the submission kit. Your agent will walk you through:</p>
+        <ol style="padding-left: 24px; margin: 0 0 16px;">
+          <li>Creating a Kaggle account and generating a Kaggle API token.</li>
+          <li>Accepting the competition rules for each Kaggle competition.</li>
+          <li>Preparing your submission materials for the relevant track.</li>
+          <li>Running the evaluation, packing, and submission scripts, and seeing your results.</li>
+        </ol>
+        <p style="margin: 0 0 16px;">Each team may submit up to five times per week, with unlimited submissions during the final three days. For more information about submission instructions, required formats, and metrics, please see the submission kit. For Track 2 participants, please create a separate submission for each tier. Your final score is a weighted combination of the three tiers.</p>
+      <div style="display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 28px;"><a href="https://huggingface.co/datasets/nvidia/video_to_data_challenge" target="_blank" rel="noopener" style="display: inline-block; font-family: var(--font-sans); font-size: 14px; color: var(--text-color-primary); text-decoration: none; border: 1px solid var(--border-color-base); border-radius: var(--radius-sm); padding: 8px 14px;" style-hover="border-color: var(--color-brand, #76b900);">Challenge Dataset ↗</a><a href="./assets/v2d_submission_kit.zip" download style="display: inline-block; font-family: var(--font-sans); font-size: 14px; color: var(--text-color-primary); text-decoration: none; border: 1px solid var(--border-color-base); border-radius: var(--radius-sm); padding: 8px 14px;" style-hover="border-color: var(--color-brand, #76b900);">Submission Kit ↓</a></div>
+      </div>
+    </div>
+  </section>
+
   <section id="leaderboard" style="padding: 104px 48px; border-top: 1px solid var(--border-color-base);">
     <div style="max-width: 1180px; margin: 0 auto; display: grid; grid-template-columns: 180px minmax(0, 1fr); gap: 48px;">
       <div>
         <h2 style="font-size: 28px; line-height: 1.1; letter-spacing: -0.02em; font-weight: 300; margin: 0; position: sticky; top: 100px;">Leaderboard</h2>
       </div>
       <div>
-      <div style="font-size: 16px; color: var(--text-color-secondary); max-width: 68ch; margin-bottom: 28px;">Live from the data release until the freeze on <time datetime="2026-11-04T17:00:00-05:00">Wednesday, November 4, 2026, at 5:00 p.m. EST</time>. <strong style="font-weight: 600;">Standings here may take up to 24 hours to reflect a new submission</strong>; your score appears on the Kaggle competition page as soon as it is computed. Track 2 is scored separately at each of its three input tiers. Every tier is measured against the same clean multi-view trajectory, so the three are directly comparable: the gap between them is how much upstream reconstruction error a pipeline absorbs. Each team may submit up to five times per week, with unlimited submissions during the final three days. To get started with a submission, take a look at the readme in the relevant track, or point your agent at the skills folder.</div>
-      <div style="display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 28px;"><a href="https://huggingface.co/datasets/nvidia/video_to_data_challenge" target="_blank" rel="noopener" style="display: inline-block; font-family: var(--font-sans); font-size: 14px; color: var(--text-color-primary); text-decoration: none; border: 1px solid var(--border-color-base); border-radius: var(--radius-sm); padding: 8px 14px;" style-hover="border-color: var(--color-brand, #76b900);">Challenge Dataset ↗</a><a href="./assets/v2d_submission_kit.zip" download style="display: inline-block; font-family: var(--font-sans); font-size: 14px; color: var(--text-color-primary); text-decoration: none; border: 1px solid var(--border-color-base); border-radius: var(--radius-sm); padding: 8px 14px;" style-hover="border-color: var(--color-brand, #76b900);">Submission Kit ↓</a></div>
+      <div style="font-size: 16px; line-height: 1.65; color: var(--text-color-secondary); max-width: 68ch; margin-bottom: 28px;">The leaderboard is live! Submissions end on <time datetime="2026-11-04T17:00:00-05:00">Wednesday, November 4, 2026, at 5:00 p.m. EST</time>. <strong style="font-weight: 600;">Standings here may take up to 24 hours to reflect a new submission</strong>; your score appears on the Kaggle competition page as soon as it is computed. Each tier in Track 2 uses a different input reference trajectory (clean, noised, or reconstructed) and is measured against the same clean trajectory.</div>
+      <p style="font-size: 16px; line-height: 1.65; color: var(--text-color-secondary); margin: 0 0 28px;">Click a metric to sort the leaderboard by that metric.</p>
       <div id="v2d-leaderboard" data-src="https://raw.githubusercontent.com/MVerghese/v2d-leaderboard-data/main/leaderboard.json"></div>
       <noscript>
         <div style="border: 1px solid var(--border-color-base); padding: 40px; text-align: center; color: var(--text-color-secondary);">The leaderboard needs JavaScript. Standings are also visible on each competition&rsquo;s Kaggle page.</div>
@@ -621,7 +644,7 @@ class Component extends DCLogic {
     return () => this.setState(s => ({ open: { ...s.open, [k]: !this.isOpen(k) } }));
   }
   componentDidMount() {
-    const ids = ["motivation","tracks","awards","judges","timeline","leaderboard","more","organizers","contact"];
+    const ids = ["motivation","tracks","awards","judges","timeline","submission","leaderboard","more","organizers","contact"];
     const links = ids.map(id => document.querySelector('nav a[href="#' + id + '"]')).filter(Boolean);
     links.forEach(a => {
       a.style.display = "inline-flex";
