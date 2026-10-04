@@ -44,11 +44,11 @@ jobs:
           docker build \
             -f runpod-image/Dockerfile \
             --build-arg BASE_IMAGE=cari4d-base:local \
-            -t ghcr.io/beardear/v2d-runpod:${{ inputs.tag }} \
+            -t ghcr.io/melanieww/v2d-runpod:${{ inputs.tag }} \
             .
 
       - name: Push
-        run: docker push ghcr.io/beardear/v2d-runpod:${{ inputs.tag }}
+        run: docker push ghcr.io/melanieww/v2d-runpod:${{ inputs.tag }}
 
       - name: Disk usage
         if: always()
