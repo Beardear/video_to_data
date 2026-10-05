@@ -3,8 +3,9 @@ FROM ${BASE_IMAGE}
 ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      openssh-server git git-lfs tmux htop rsync curl \
-    && rm -rf /var/lib/apt/lists/* && mkdir -p /var/run/sshd
+      openssh-server git git-lfs tmux htop rsync curl util-linux \
+    && rm -rf /var/lib/apt/lists/* && mkdir -p /var/run/sshd \
+    && rm -f /etc/ssh/ssh_host_*
 
 # SAM2 in its own venv (CUDA 12.4 to match the base image)
 RUN python3 -m venv /opt/venvs/sam2 && \

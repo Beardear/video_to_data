@@ -1,10 +1,15 @@
 #!/bin/bash
-# Run at the start of every pod session: bash /vol/video_to_data/scripts/runpod/bootstrap.sh
+# Run at the start of every pod session from the docker-image worktree.
+set -e
+if ! mountpoint -q /vol; then
+  echo "Network volume is not mounted at /vol; refusing container-disk writes." >&2
+  exit 1
+fi
 pip install -q -U "brotli>=1.2" || true
 mkdir -p /vol/{data,weights,outputs/logs,submission,cache,secrets}
 
-[ -n "$GIT_USER_NAME" ]  && git config --global user.name  "$GIT_USER_NAME"
-[ -n "$GIT_USER_EMAIL" ] && git config --global user.email "$GIT_USER_EMAIL"
+if [ -n "$GIT_USER_NAME" ]; then git config --global user.name "$GIT_USER_NAME"; fi
+if [ -n "$GIT_USER_EMAIL" ]; then git config --global user.email "$GIT_USER_EMAIL"; fi
 git config --global --add safe.directory /vol/video_to_data
 
 if [ -f /vol/secrets/kaggle.json ]; then
