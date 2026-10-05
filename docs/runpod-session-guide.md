@@ -1,384 +1,238 @@
-# Runpod Session Guide — video_to_data (CARI4D, Track 1)
+# Runpod Guide — video_to_data (CARI4D, Track 1)
 
-How to get a working A100 pod again, from any Mac or Windows computer.
+How to run the project on a Runpod A100, from any Mac or Windows computer.
 
----
+**Where to start:**
 
-## What persists and what doesn't
-
-| Thing | Where it lives | Survives a pod ending? |
-|---|---|---|
-| Docker image | `ghcr.io/melanieww/v2d-runpod:v1.1` (GitHub Container Registry) | ✅ |
-| Template | Runpod → My Templates | ✅ |
-| Secrets (`HF_TOKEN`, Kaggle) | Runpod → Secrets | ✅ |
-| Registry credential `ghcr` | Runpod → Credentials | ✅ |
-| Network volume `hostile_purple_louse` (250 GB, **EU-RO-1**) | Mounted at **`/vol`** | ✅ |
-| The pod itself | — | ❌ Deploy a new one each session |
-| Container disk (`/`, `/root`, apt installs, `~/.bashrc`) | — | ❌ Wiped |
-
-**Rule:** anything you want to keep goes in `/vol`. Code changes go to GitHub.
-
-Pods with a network volume are normally **terminated** rather than stopped, so you deploy a fresh pod each session. That's expected: the image, template and volume make it a ~5 minute routine.
-
-Key names:
-
-- Fork: `MelanieWW/video_to_data` (`origin`), upstream `Beardear/video_to_data`
-- Image: `ghcr.io/melanieww/v2d-runpod:v1.1`
-- Image code (baked in, read-only workflow): `/workspace/v2d_*`
-- Volume layout: `/vol/video_to_data`, `/vol/data`, `/vol/weights`, `/vol/outputs`, `/vol/submission`, `/vol/cache`, `/vol/secrets`
-
----
-
-## Part A — One-time setup on a NEW computer
-
-Do this once per computer. Skip it on a computer that already works.
-
-### A1. Create an SSH key
-
-**Mac (Terminal):**
-```bash
-ssh-keygen -t ed25519            # press Enter to accept ~/.ssh/id_ed25519; set a passphrase
-cat ~/.ssh/id_ed25519.pub | pbcopy
-```
-
-**Windows (CMD):**
-```
-ssh-keygen -t ed25519
-type %USERPROFILE%\.ssh\id_ed25519.pub | clip
-```
-
-Never share or upload the file **without** `.pub`; that's the private key.
-
-### A2. Add the public key to the Runpod TEMPLATE
-
-Runpod's account-level SSH keys did **not** reach this image's pods, so the key must be in the template itself.
-
-Each computer gets its **own variable**. Leave the existing ones untouched.
-
-| Variable | Computer |
+| You are… | Go to |
 |---|---|
-| `PUBLIC_KEY` | MacBook (already set) |
-| `PUBLIC_KEY_2` | second computer (e.g. Windows PC) |
+| A **new teammate** | Ask the owner to do **Part 1**, then follow **Part 2** once |
+| Setting up **another computer** of your own | **Part 3** |
+| Starting a normal **work session** | **Part 4** |
+| Stuck | **Part 5** |
+| The **owner**, changing the image | **Part 6** |
 
-1. Runpod → **My Templates** → edit the template → Environment variables → **+ Add Environment variable**.
-2. Key: `PUBLIC_KEY_2`. Value: the new computer's full `.pub` line (`ssh-ed25519 AAAAC3... user@host`).
-3. Save. Only pods deployed **after** saving get the key.
+---
 
-The image's `start.sh` (v1.1+) reads `PUBLIC_KEY`, `PUBLIC_KEY_2` and `PUBLIC_KEY_3`, so up to three computers need only template variables. A fourth would need a `start.sh` change and an image rebuild (Part E).
+## Quick reference
 
-### A3. Add the public key to GitHub
+| Item | Value |
+|---|---|
+| Owner (GitHub) | `MelanieWW` |
+| Code repo | `MelanieWW/video_to_data` (upstream: `Beardear/video_to_data`) |
+| Docker image (private) | `ghcr.io/melanieww/v2d-runpod:v1.1` |
+| GPU | A100 **80 GB** (SXM or PCIe). Never 40 GB. Avoid H100 for now. |
+| Code baked into the image | `/workspace/v2d_*` |
+| Your network volume | mounted at **`/vol`**: `video_to_data`, `data`, `weights`, `outputs`, `submission`, `cache`, `secrets` |
 
-Install GitHub CLI if needed:
+**What persists:** the image, your template, secrets, registry credential and network volume (`/vol`).
+**What doesn't:** the pod itself and its container disk (`/`, `/root`, `~/.bashrc`). Each session deploys a fresh pod.
+**Rule:** keep files in `/vol`; push code to GitHub.
 
-- Mac: `brew install gh`
-- Windows: `winget install --id GitHub.cli`
+Everyone uses **their own Runpod account**. Templates, secrets and volumes are never shared between accounts. Only the image (Part 1) and the GitHub repo are shared.
 
-Then:
+---
+
+## Part 1 — Owner: give a teammate access
+
+Done by **MelanieWW**, once per teammate. Needs the teammate's GitHub username.
+
+1. **Image:** go to https://github.com/MelanieWW?tab=packages → **v2d-runpod** → **Package settings** → **Manage access** → **Invite** → their username → role **Read**. Keep visibility **Private**.
+2. **Repo** (so they can push): https://github.com/MelanieWW/video_to_data → **Settings** → **Collaborators** → **Add people** → their username.
+
+To revoke, remove them from both places.
+
+---
+
+## Part 2 — New teammate: first-time setup
+
+Do these in order, once. Commands are given for **Mac (Terminal)** and **Windows (CMD)** where they differ.
+
+### 2.1 Accept the invitations
+
+Accept the GitHub invitations (email, or https://github.com/notifications). Check that https://github.com/MelanieWW/video_to_data/pkgs/container/v2d-runpod opens while signed in.
+
+### 2.2 Create an SSH key on your computer
+
+| Mac | Windows |
+|---|---|
+| `ssh-keygen -t ed25519` | `ssh-keygen -t ed25519` |
+| `cat ~/.ssh/id_ed25519.pub \| pbcopy` | `type %USERPROFILE%\.ssh\id_ed25519.pub \| clip` |
+
+Accept the default path and set a passphrase. The second command copies your **public** key (the `.pub` file) to the clipboard. Never share the file without `.pub`.
+
+### 2.3 Connect the key to GitHub and the SSH agent
+
+Install GitHub CLI (Mac: `brew install gh`; Windows: `winget install --id GitHub.cli`), then:
+
 ```bash
-gh auth login                                   # GitHub.com → HTTPS → Yes → browser
-gh auth refresh -h github.com -s admin:public_key,workflow
+gh auth login                                    # GitHub.com → HTTPS → Yes → browser
+gh auth refresh -h github.com -s admin:public_key
 gh ssh-key add ~/.ssh/id_ed25519.pub --title "<computer name>"
 ```
-On Windows use `%USERPROFILE%\.ssh\id_ed25519.pub` as the path.
+On Windows, use `%USERPROFILE%\.ssh\id_ed25519.pub` as the path.
 
-### A4. Load the key into the SSH agent
+Load the key into the agent. This lets the pod use your key for `git push`:
 
-This is needed for `-A`, so the pod can push to GitHub using your key.
+- **Mac:** `ssh-add --apple-use-keychain ~/.ssh/id_ed25519`
+- **Windows:** once, in an **admin PowerShell**, run `Get-Service ssh-agent | Set-Service -StartupType Automatic; Start-Service ssh-agent`. Then in CMD: `ssh-add %USERPROFILE%\.ssh\id_ed25519`
 
-**Mac:**
-```bash
-ssh-add --apple-use-keychain ~/.ssh/id_ed25519
-ssh-add -l          # should list the key
-```
+Test it: `ssh -T git@github.com` should print `Hi <username>!`.
 
-**Windows:** first, once, in an **admin PowerShell**:
-```
-Get-Service ssh-agent | Set-Service -StartupType Automatic
-Start-Service ssh-agent
-```
-Then in CMD:
-```
-ssh-add %USERPROFILE%\.ssh\id_ed25519
-ssh-add -l
-```
+### 2.4 Create a GitHub token for pulling the image
 
-### A5. Test
+1. Go to https://github.com/settings/tokens → **Generate new token (classic)**. Fine-grained tokens don't work with the container registry.
+2. Name it `runpod-ghcr-pull`, check **only** `read:packages`, and generate.
+3. Copy it right away; GitHub shows it only once.
 
-```bash
-ssh -T git@github.com      # → "Hi MelanieWW! You've successfully authenticated..."
-```
+### 2.5 Set up your Runpod account
 
-### A6. (Optional) Local copy of the repo, for rebuilding the image
-
-```bash
-git clone https://github.com/MelanieWW/video_to_data.git
-cd video_to_data
-git remote add upstream https://github.com/Beardear/video_to_data.git
-gh repo set-default MelanieWW/video_to_data
-```
-
----
-
-## Part B — Template settings (reference)
-
-The template should hold all of this permanently, so no overrides are needed at deploy time.
+**a. Registry credential:** go to https://console.runpod.io/user/credentials?tab=registry-credentials → **Create** → type **Docker**:
 
 | Field | Value |
 |---|---|
+| Name | `ghcr` |
+| Username | **your** GitHub username |
+| Password | the token from 2.4 |
+| Registry URL *(if shown)* | `ghcr.io` |
+
+**b. Secrets:** go to https://console.runpod.io/user/secrets. Create `HF_TOKEN` with your Hugging Face **Read** token from https://huggingface.co/settings/tokens. With that HF account, also accept the terms on the `nvidia/video_to_data_challenge` dataset page. Add `KAGGLE_USERNAME` and `KAGGLE_KEY` later, when you're ready to submit.
+
+**c. Network volume:** go to **Storage** → **New Network Volume**. Make it at least 200 GB, in a datacenter that currently lists A100 80GB. Billing runs continuously, even with no pod.
+
+**d. Template:** go to **My Templates** → **New Template**:
+
+| Field | Value |
+|---|---|
+| Type | Pod |
 | Container image | `ghcr.io/melanieww/v2d-runpod:v1.1` |
-| Registry credential | `ghcr` (Docker type; username `MelanieWW`, classic token with `read:packages`) |
+| Registry credential | `ghcr` |
 | Container disk | 50 GB |
 | Volume mount path | `/vol` |
-| HTTP ports | `8080` (output browser) |
-| TCP ports | `22` (SSH) |
+| HTTP ports | `8080` |
+| TCP ports | `22` |
+| Start command | *(leave empty)* |
 
-**Start command:** leave **empty**. Since `v1.1`, the image's `start.sh` installs the SSH keys itself.
-
-**Environment variables:**
+Environment variables:
 
 | Key | Value |
 |---|---|
-| `PUBLIC_KEY` | MacBook's `.pub` line |
-| `PUBLIC_KEY_2` | second computer's `.pub` line *(add when set up)* |
-| `PUBLIC_KEY_3` | third computer's `.pub` line *(optional)* |
-| `HF_TOKEN` | `{{ RUNPOD_SECRET_HF_TOKEN }}` |
-| `KAGGLE_USERNAME` | `{{ RUNPOD_SECRET_KAGGLE_USERNAME }}` *(once the secret exists)* |
-| `KAGGLE_KEY` | `{{ RUNPOD_SECRET_KAGGLE_KEY }}` *(once the secret exists)* |
+| `PUBLIC_KEY` | your public key line from 2.2 (`ssh-ed25519 AAAA... you@host`) |
+| `HF_TOKEN` | `{{ RUNPOD_SECRET_HF_TOKEN }}` (type it literally, or pick the secret with the 🔑 icon) |
 | `HF_HOME` | `/vol/cache/hf` |
 | `TORCH_HOME` | `/vol/cache/torch` |
-| `HF_HUB_ENABLE_HF_TRANSFER` | `1` |
+| `HF_XET_HIGH_PERFORMANCE` | `1` *(optional: faster Hugging Face downloads)* |
+| `GIT_USER_NAME` | your name |
+| `GIT_USER_EMAIL` | your GitHub email |
+| `KAGGLE_USERNAME` / `KAGGLE_KEY` | `{{ RUNPOD_SECRET_KAGGLE_USERNAME }}` / `{{ RUNPOD_SECRET_KAGGLE_KEY }}` *(add later)* |
 
-Keep the `{{ ... }}` placeholders literally; Runpod fills in the secret values at start.
+### 2.6 First pod: initialize your volume
+
+1. Deploy and connect as in **Part 4** (steps 4.1–4.3).
+2. Run once:
+   ```bash
+   git clone git@github.com:MelanieWW/video_to_data.git /vol/video_to_data
+   tmux new -s init
+   bash /vol/video_to_data/scripts/runpod/init_volume.sh
+   ```
+   This sets up the folders and downloads the Track 1 data (~0.5 GB) and the CARI4D weights into `/vol/weights/cari4d`. Detach with `Ctrl+B`, then `D`. It's done when it prints `volume initialized`. If it's interrupted, rerun it; the download resumes.
 
 ---
 
-## Part C — Every session
+## Part 3 — Adding another computer
 
-### C1. Deploy
+Each computer has its own key. Never copy private keys between machines.
+
+1. On the new computer, do **2.2** and **2.3**.
+2. In your template, add the new public key as **`PUBLIC_KEY_2`**, or `PUBLIC_KEY_3` for a third computer. Don't change the existing `PUBLIC_KEY`.
+3. Deploy a new pod. Template changes only apply to pods deployed after saving.
+
+The image supports up to three keys. `GIT_USER_NAME` and `GIT_USER_EMAIL` stay single: one person per template.
+
+---
+
+## Part 4 — Every session
+
+### 4.1 Deploy
 
 1. Go to https://console.runpod.io/deploy → **GPU** tab.
-2. Set **Network volume** (next to Search GPUs) to `hostile_purple_louse`. This limits GPUs to EU-RO-1. **Don't skip this**: without it you can get a GPU in another region with no volume attached.
-3. Pick **A100 SXM** (80 GB) or **A100 PCIe** (80 GB). Never a 40 GB card. Avoid H100 until `sm_90` support is confirmed.
-4. **Change Template** → **My Templates** → yours.
-5. Check the bottom: **Persistent storage** shows `hostile_purple_louse` at `/vol`.
-6. Click **Deploy On-Demand**. If both A100s are out of capacity, wait and retry, or use "Deploy when available".
+2. Set **Network volume** (next to Search GPUs) to **your** volume. This limits the GPU list to its datacenter. Without it, you can get a GPU with no volume attached.
+3. Pick an **A100 80GB** (SXM or PCIe). Then **Change Template** → **My Templates** → yours.
+4. Confirm **Persistent storage** shows your volume at `/vol`, then click **Deploy On-Demand**.
 
-### C2. Connect
+### 4.2 Connect
 
-Pod → **Connect** → copy the **direct TCP** command (`root@<IP> -p <PORT>`), and add `-A`:
-
-**Mac:**
-```bash
-ssh -A root@<IP> -p <PORT> -i ~/.ssh/id_ed25519
-```
-
-**Windows (CMD):**
-```
-ssh -A root@<IP> -p <PORT> -i %USERPROFILE%\.ssh\id_ed25519
-```
-
-Answer `yes` to the fingerprint question.
-
-### C3. Verify (30 seconds)
+Go to Pod → **Connect** and copy the **direct TCP** command (`root@<IP> -p <PORT>`). Add `-A`:
 
 ```bash
-nvidia-smi                                  # A100 80GB
-python -c "import torch; print(torch.__version__, torch.cuda.is_available(), torch.cuda.get_device_capability())"   # 2.5.1+cu124 True (8, 0)
-df -h /vol                                  # ~250 GB network volume, NOT "overlay 50G"
-echo ${#HF_TOKEN}                           # non-zero (37)
-ssh -T git@github.com                       # Hi MelanieWW!
+ssh -A root@<IP> -p <PORT> -i ~/.ssh/id_ed25519                 # Mac
+ssh -A root@<IP> -p <PORT> -i %USERPROFILE%\.ssh\id_ed25519      # Windows CMD
 ```
 
-**If `df -h /vol` shows `overlay 50G`, stop.** The volume isn't attached. Terminate and redeploy with the network-volume filter set (C1 step 2).
-
-### C4. Restore the session environment
-
-The container disk is wiped each time, so run the bootstrap script:
-```bash
-bash /vol/bootstrap.sh
-source ~/.bashrc
-```
-
-Create `/vol/bootstrap.sh` **once**. It persists on the volume:
-```bash
-cat > /vol/bootstrap.sh <<'EOF'
-#!/bin/bash
-# Re-applies per-pod settings lost when the container disk is wiped.
-mkdir -p /vol/{data,weights,outputs/logs,submission,cache,secrets}
-
-git config --global user.name  "Moran"
-git config --global user.email "<your GitHub email>"
-git config --global --add safe.directory /vol/video_to_data
-
-# Kaggle credentials, if saved on the volume
-if [ -f /vol/secrets/kaggle.json ]; then
-  mkdir -p ~/.kaggle && ln -sf /vol/secrets/kaggle.json ~/.kaggle/kaggle.json
-  chmod 600 /vol/secrets/kaggle.json
-fi
-
-grep -q "cd /vol/video_to_data" ~/.bashrc || cat >> ~/.bashrc <<'RC'
-cd /vol/video_to_data 2>/dev/null
-alias sam2py=/opt/venvs/sam2/bin/python
-RC
-
-# Extra apt packages beyond the image: add here
-# apt-get update && apt-get install -y <pkgs>
-echo "bootstrap done"
-EOF
-chmod +x /vol/bootstrap.sh
-```
-
-### C5. Work
-
-- Use **tmux** for anything long, so it survives disconnects: `tmux new -s run`. Detach with `Ctrl+B` then `D`; reattach with `tmux attach -t run`.
-- Write outputs and logs under `/vol/outputs`.
-- Browse outputs in a web browser: Pod → Connect → **HTTP 8080**.
-
-### C6. Before ending the session
+### 4.3 Verify and bootstrap
 
 ```bash
-cd /vol/video_to_data
-git status
-git add -A && git commit -m "<message>" && git push origin main
-ls /vol/outputs                             # results are on the volume, not the container disk
+nvidia-smi                 # A100 80GB
+df -h /vol                 # your network volume, NOT "overlay 50G"
+echo ${#HF_TOKEN}          # non-zero
+ssh -T git@github.com      # Hi <username>!
+bash /vol/video_to_data/scripts/runpod/bootstrap.sh && source ~/.bashrc
 ```
 
-Then, in Runpod: Pod → **Stop / Terminate**.
+If `df -h /vol` shows `overlay 50G`, stop: the volume isn't attached. Terminate and redeploy with step 4.1.2.
 
-**The A100 bills every second it runs. Don't leave it idle.** The volume keeps billing a small storage fee regardless.
+### 4.4 Work
+
+- Run long jobs in **tmux**: `tmux new -s run`. Detach with `Ctrl+B`, `D`; reattach with `tmux attach -t run`.
+- The toolkit's Docker wrappers (`python -m v2d.*.docker.*`) don't work inside a pod. Run the library module directly with the same flags, e.g. `python -m v2d.cari4d.lib.run_inference --video_path ... --output_dir ...`. This runs the code baked into `/workspace/v2d_*`.
+- Write outputs and logs to `/vol/outputs`. To browse them in a web browser, go to Pod → Connect → **HTTP 8080**.
+
+### 4.5 End the session
+
+```bash
+cd /vol/video_to_data && git add -A && git commit -m "<message>" && git push
+```
+
+Then go to Runpod → Pod → **Terminate**. **The A100 bills every second it runs.**
 
 ---
 
-## Part D — Troubleshooting
+## Part 5 — Troubleshooting
 
 | Symptom | Fix |
 |---|---|
-| Asks `root@...'s password:` | The pod doesn't have your key. Check this computer's `.pub` line is in `PUBLIC_KEY`, `PUBLIC_KEY_2` or `PUBLIC_KEY_3`, the template image is `v1.1` or later, and the **Start command** is empty. Then terminate and redeploy. Logs → **Container** shows `DIAG keylen=... key2len=... key3len=...`; a zero means that variable didn't reach the pod. |
-| Asks `Enter passphrase for key` | Normal. That's your local key's passphrase. Run `ssh-add` (A4) to stop the prompts. |
+| Asks `root@...'s password:` | This computer's key isn't in your template (`PUBLIC_KEY`/`_2`/`_3`), or the image tag is older than `v1.1`, or the start command isn't empty. Fix the template and redeploy. Logs → **Container** shows `DIAG keylen=...`; a zero means that key is missing. |
+| Asks `Enter passphrase for key` | Normal; that's your local key's passphrase. Run `ssh-add` (2.3) to stop the prompts. |
 | `REMOTE HOST IDENTIFICATION HAS CHANGED` | `ssh-keygen -R "[<IP>]:<PORT>"`, then reconnect. |
-| `df -h /vol` shows `overlay 50G` | Volume not attached (wrong region). Redeploy with the network-volume filter. |
-| `git@github.com: Permission denied (publickey)` on the pod | On your computer: `ssh-add -l` must list the key (A4), the key must be on GitHub (A3), and you must connect with `-A`. |
-| Pod stuck pulling the image, or "unauthorized" | Check the `ghcr` credential (token has `read:packages`) and that the image name is all lowercase. |
-| GPU "Out of capacity" | Try the other A100 type in EU-RO-1, wait, or use "Deploy when available". The volume can't move regions without copying. |
-| `HF_TOKEN` length 0 | The template's `HF_TOKEN` variable is missing or the secret name doesn't match. |
+| `df -h /vol` shows `overlay 50G` | Wrong region. Redeploy with the Network volume filter (4.1). |
+| `Permission denied (publickey)` from GitHub on the pod | On your computer, `ssh-add -l` must list your key, the key must be on GitHub (2.3), and you must connect with `-A`. |
+| Image pull `unauthorized` / `denied` | Check in order: Part 1 access was granted, the invitation was accepted (2.1), the token is **classic** with `read:packages` (2.4), and the credential uses **your** username (2.5a). |
+| GPU "Out of capacity" | Try the other A100 type, wait, or use "Deploy when available". Your volume can't change regions. |
+| `HF_TOKEN` length 0, or HF 403 | Check the `HF_TOKEN` template variable and secret name, and that the dataset terms were accepted. |
+| Wrong Git author | Set `GIT_USER_NAME`/`GIT_USER_EMAIL` in the template. For now: `git config --global user.name "..."` and `user.email "..."`. |
+
+**Sharing data between teammates:** volumes can't be shared across accounts. Share code through GitHub. Share large outputs through a private Hugging Face dataset: `hf upload <user>/v2d-outputs /vol/outputs --repo-type dataset --private`, then `hf download` on the other side.
 
 ---
 
-## Part E — Rebuilding the image
+## Part 6 — Owner: rebuilding the image
 
-> ⚠️ **Only rebuild when the image itself must change.** A rebuild takes about 50 minutes. Every template that uses the image (yours and your teammate's) must then be updated to the new tag. Most day-to-day work never needs one.
+> ⚠️ **Rebuild only when the image itself must change.** It takes about 50 minutes, and every teammate must then update their template's image tag.
 
-**Rebuild when you change:**
-- `runpod-image/Dockerfile` or `runpod-image/start.sh`
-- `reconstruction/modules/v2d_cari4d/docker/Dockerfile`
-- code that the image bakes into `/workspace/v2d_*` (anything under `reconstruction/modules/` that the Dockerfile `COPY`s), **if** you run it from `/workspace` and need the change there
-- system packages or Python dependencies that must be present on every pod
-- support for a 4th computer's SSH key
+**Rebuild for:** changes to `runpod-image/` (`Dockerfile`, `start.sh`); changes to `reconstruction/modules/v2d_cari4d/docker/Dockerfile`; changes to code baked into `/workspace/v2d_*` that you run from there; dependencies needed on every pod; a fourth SSH key.
 
-**Don't rebuild for:**
-- code you run from `/vol/video_to_data`. Commit and push to GitHub instead.
-- data, weights or outputs. These live on `/vol`.
-- template settings: environment variables, secrets, ports, disk size, `PUBLIC_KEY` / `_2` / `_3`
-- a one-off package for one session. Add it to `/vol/bootstrap.sh` instead.
-- new Runpod or GitHub credentials
+**Don't rebuild for:** code run from `/vol/video_to_data` (just push it), data, weights, outputs, template settings, credentials, or session packages (add those to `scripts/runpod/bootstrap.sh`).
 
-From a local clone (A6), after editing `runpod-image/` or the CARI4D Dockerfile:
+**Steps** (from a local clone, or from the pod with the website trigger):
 ```bash
-git add -A && git commit -m "<change>" && git push origin main
+git add -A && git commit -m "<change>" && git push
 gh workflow run build-runpod-image.yml -f tag=v1.2      # bump the tag every rebuild
 gh run watch
 ```
-Then update the template's container image to the new tag. The build takes about 50 minutes on GitHub.
+Without `gh`, use GitHub → **Actions** → **build-runpod-image** → **Run workflow**, and type the new tag. The form's default tag is only a suggestion.
 
-The pull-down default tag in the workflow form (line 9 of the workflow file) is only a suggestion; the tag you type is what gets built.
+Afterwards: update your template's image tag, and tell teammates to update theirs. No new access is needed.
 
 **Image history:**
-- `v1.0`: first build. Needed a start-command override for SSH keys.
-- `v1.1`: `start.sh` writes `PUBLIC_KEY`/`_2`/`_3` to `/root/.ssh`. No override needed. **Current.**
-
----
-
-## Part F — Sharing with a teammate (their own Runpod account, image stays private)
-
-The image `ghcr.io/melanieww/v2d-runpod` stays **private**. MelanieWW grants the teammate read access on GitHub. The teammate then uses **their own** token, Runpod credential, template, secrets and network volume.
-
-Nothing from MelanieWW's Runpod account is shared: not the template, the `ghcr` credential, the secrets, or the volume `hostile_purple_louse`.
-
-### F1. MelanieWW: grant access to the image
-
-1. Go to https://github.com/MelanieWW?tab=packages → **v2d-runpod** → **Package settings** (right sidebar).
-2. Under **Manage access**, click **Invite** (or **Add**).
-3. Search for the teammate's **GitHub username**, select it, and set the role to **Read**.
-4. Leave the package visibility as **Private**.
-
-Access covers every tag (`v1.0`, `v1.1`, ...). To revoke it later, return to the same page and remove the teammate.
-
-**Optional: let the teammate push code.** Go to https://github.com/MelanieWW/video_to_data → **Settings** → **Collaborators** → **Add people** → their username. Otherwise they work in their own fork and open pull requests.
-
-### F2. Teammate: accept the invitation
-
-If GitHub sends an invitation (by email or in notifications at https://github.com/notifications), accept it. Then confirm that https://github.com/MelanieWW/video_to_data/pkgs/container/v2d-runpod opens while signed in.
-
-### F3. Teammate: create a GitHub token for Runpod
-
-GitHub's container registry only accepts **classic** tokens. Fine-grained tokens don't work here.
-
-1. Sign in to GitHub as the teammate and go to https://github.com/settings/tokens.
-2. Click **Generate new token** → **Generate new token (classic)**.
-3. **Note:** `runpod-ghcr-pull`. **Expiration:** your choice. A no-expiry token is convenient, but a fixed date is safer; set a calendar reminder to renew it.
-4. **Scopes:** check **only** `read:packages`.
-5. Click **Generate token** and copy it right away. GitHub shows it only once.
-
-### F4. Teammate: add the token to Runpod
-
-In the **teammate's own** Runpod account:
-
-1. Go to https://console.runpod.io/user/credentials?tab=registry-credentials → **Create new registry credential**.
-2. Choose type **Docker**.
-3. Fill in:
-
-   | Field | Value |
-   |---|---|
-   | Name | `ghcr` |
-   | Username | the teammate's **own** GitHub username |
-   | Password | the token from F3 |
-   | Registry / server URL *(only if shown)* | `ghcr.io` |
-
-4. Save.
-
-### F5. Teammate: everything else in their own account
-
-| Item | Where | Notes |
-|---|---|---|
-| SSH key | their computer | Part A1. Put it in **their** template's `PUBLIC_KEY`. |
-| SSH key on GitHub | GitHub | Part A3, if they push code |
-| `HF_TOKEN` secret | Runpod → Secrets | Their own Hugging Face token. They must accept the `nvidia/video_to_data_challenge` terms with that HF account. |
-| Network volume | Runpod → Storage | Their own, at least 200 GB, in a datacenter with A100 80GB capacity |
-| Template | Runpod → My Templates | Copy every setting from **Part B**. Image `ghcr.io/melanieww/v2d-runpod:v1.1`, registry credential **their** `ghcr`, **their** `PUBLIC_KEY`, empty start command, same other variables. |
-
-Then they follow **Part C** each session, with their own volume selected in the Network volume filter.
-
-### F6. Teammate: verify the image pull
-
-Deploy as in Part C. In the pod's **Logs** → **System**, the pull should end with:
-```
-Status: Downloaded newer image for ghcr.io/melanieww/v2d-runpod:v1.1
-```
-If it shows `unauthorized` or `denied`, check, in order:
-
-1. F1: they're listed under Manage access.
-2. F2: the invitation was accepted.
-3. F3: the token is **classic** and has `read:packages`.
-4. F4: the credential's username is **their** GitHub username, and the template uses that credential.
-
-### F7. When MelanieWW rebuilds the image
-
-Tell the teammate the new tag (e.g. `v1.2`). They update the container image in **their** template. No new access or token is needed.
-
-### Sharing data between accounts
-
-Network volumes can't be shared across Runpod accounts.
-
-- **Code:** goes through GitHub (`MelanieWW/video_to_data`).
-- **Large outputs:** upload to a private Hugging Face dataset repo, e.g. `hf upload <user>/v2d-outputs /vol/outputs --repo-type dataset --private`, and download on the other side with `hf download`.
-- **Submission files:** whoever submits needs the final outputs on their own volume.
+- `v1.0`: first build; needed a start-command override for SSH.
+- `v1.1` (current): `start.sh` installs `PUBLIC_KEY`/`_2`/`_3`; no override needed.
