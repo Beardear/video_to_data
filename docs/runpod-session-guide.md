@@ -6,11 +6,11 @@ How to run the project on a Runpod A100, from any Mac or Windows computer.
 
 | You are… | Go to |
 |---|---|
-| A **new teammate** | Ask the owner to do **Part 1**, then follow **Part 2** once |
+| A **new teammate** | Ask the owners to do **Part 1**, then follow **Part 2** once |
 | Setting up **another computer** of your own | **Part 3** |
 | Starting a normal **work session** | **Part 4** |
 | Stuck | **Part 5** |
-| The **owner**, changing the image | **Part 6** |
+| The **image owner** (MelanieWW), changing the image | **Part 6** |
 
 ---
 
@@ -18,8 +18,8 @@ How to run the project on a Runpod A100, from any Mac or Windows computer.
 
 | Item | Value |
 |---|---|
-| Owner (GitHub) | `MelanieWW` |
-| Code repo | `MelanieWW/video_to_data` (upstream: `Beardear/video_to_data`) |
+| Team working repo | `Beardear/video_to_data`. Clone, push and open PRs here. |
+| Image owner | `MelanieWW`. Built from the fork `MelanieWW/video_to_data`. |
 | Docker image (private) | `ghcr.io/melanieww/v2d-runpod:v1.1` |
 | GPU | A100 **80 GB** (SXM or PCIe). Never 40 GB. Avoid H100 for now. |
 | Code baked into the image | `/workspace/v2d_*` |
@@ -33,14 +33,14 @@ Everyone uses **their own Runpod account**. Templates, secrets and volumes are n
 
 ---
 
-## Part 1 — Owner: give a teammate access
+## Part 1 — Owners: give a teammate access
 
-Done by **MelanieWW**, once per teammate. Needs the teammate's GitHub username.
+Done once per teammate, using their GitHub username. Two different people do the two steps.
 
-1. **Image:** go to https://github.com/MelanieWW?tab=packages → **v2d-runpod** → **Package settings** → **Manage access** → **Invite** → their username → role **Read**. Keep visibility **Private**.
-2. **Repo** (so they can push): https://github.com/MelanieWW/video_to_data → **Settings** → **Collaborators** → **Add people** → their username.
+1. **Image (MelanieWW):** go to https://github.com/MelanieWW?tab=packages → **v2d-runpod** → **Package settings** → **Manage access** → **Invite** → their username → role **Read**. Keep visibility **Private**.
+2. **Repo (Beardear owner):** https://github.com/Beardear/video_to_data → **Settings** → **Collaborators** → **Add people** → their username.
 
-To revoke, remove them from both places.
+To revoke, each owner removes them from their page.
 
 ---
 
@@ -131,7 +131,7 @@ Environment variables:
 1. Deploy and connect as in **Part 4** (steps 4.1–4.3).
 2. Run once:
    ```bash
-   git clone git@github.com:MelanieWW/video_to_data.git /vol/video_to_data
+   git clone git@github.com:Beardear/video_to_data.git /vol/video_to_data
    tmux new -s init
    bash /vol/video_to_data/scripts/runpod/init_volume.sh
    ```
@@ -223,13 +223,14 @@ Then go to Runpod → Pod → **Terminate**. **The A100 bills every second it ru
 
 **Don't rebuild for:** code run from `/vol/video_to_data` (just push it), data, weights, outputs, template settings, credentials, or session packages (add those to `scripts/runpod/bootstrap.sh`).
 
-**Steps** (from a local clone, or from the pod with the website trigger):
+**Steps.** The image builds from MelanieWW's fork, so first bring it up to date with the team repo. From a clone of `MelanieWW/video_to_data` with `upstream` = `Beardear/video_to_data`:
 ```bash
+git pull upstream main && git push origin main     # sync team changes into the fork
 git add -A && git commit -m "<change>" && git push
 gh workflow run build-runpod-image.yml -f tag=v1.2      # bump the tag every rebuild
 gh run watch
 ```
-Without `gh`, use GitHub → **Actions** → **build-runpod-image** → **Run workflow**, and type the new tag. The form's default tag is only a suggestion.
+Run `gh` against the fork (`-R MelanieWW/video_to_data`). Without `gh`, use the fork's GitHub → **Actions** → **build-runpod-image** → **Run workflow**, and type the new tag. The form's default tag is only a suggestion.
 
 Afterwards: update your template's image tag, and tell teammates to update theirs. No new access is needed.
 
