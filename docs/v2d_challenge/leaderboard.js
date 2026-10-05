@@ -63,6 +63,26 @@
     return direction === "asc" ? x - y : y - x;
   }
 
+  function canonicalRanks(track, metric) {
+    var ranks = new Map();
+    if (!metric) return ranks;
+    track.rows.filter(function (row) {
+      return row.is_baseline !== true && num(row.scores[metric.key]) !== null;
+    }).sort(function (a, b) {
+      return compare(a, b, metric.key, metric.higher_is_better === false ? "asc" : "desc");
+    }).forEach(function (row, index) {
+      ranks.set(row, index + 1);
+    });
+    return ranks;
+  }
+
+  function isCari4dBaseline(track, row) {
+    return row.is_baseline === true && (
+      (track.key === "track_1" && /^CARI4D\b/i.test(row.team)) ||
+      (track.key === "track_2_tier3" && /\bCARI4D Reconstruction\b/i.test(row.team))
+    );
+  }
+
   function renderTable(track, state) {
     var available = track.metrics.filter(function (m) { return m.available; });
     var wrap = el("div", "overflow-x:auto;-webkit-overflow-scrolling:touch");
@@ -126,19 +146,29 @@
       return compare(a, b, state.sortKey, state.sortDir);
     });
 
+    var selectedMetric = available.filter(function (metric) { return metric.key === state.sortKey; })[0];
+    var ranks = canonicalRanks(track, selectedMetric);
     var tbody = el("tbody");
-    var participantRank = 0;
     rows.forEach(function (row) {
       var baseline = row.is_baseline === true;
-      if (!baseline) participantRank += 1;
       var tr = el("tr", "border-bottom:1px solid " + css.border);
       var cell = "padding:14px;text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums";
 
-      tr.appendChild(el("td", cell + ";text-align:left;color:" + css.muted + ";font-family:" + css.mono, baseline ? "—" : participantRank));
+      tr.appendChild(el("td", cell + ";text-align:left;color:" + css.muted + ";font-family:" + css.mono, ranks.has(row) ? ranks.get(row) : "—"));
 
       var teamCell = el("td", cell + ";text-align:left;white-space:normal");
+      var teamName = track.key === "track_1" && isCari4dBaseline(track, row)
+        ? "CARI4D (commercial) Baseline" : row.team;
       var name = el("div", "font-weight:" + (baseline ? "400" : "500") +
-        ";color:" + (baseline ? css.muted : css.ink), row.team);
+        ";color:" + (baseline ? css.muted : css.ink), teamName);
+      if (isCari4dBaseline(track, row)) {
+        var marker = el("a", "color:inherit;text-decoration:none", "*");
+        marker.href = "#v2d-cari4d-baseline-note";
+        marker.setAttribute("aria-label", "About the CARI4D baseline");
+        var superscript = el("sup", "margin-left:2px");
+        superscript.appendChild(marker);
+        name.appendChild(superscript);
+      }
       if (baseline) {
         name.appendChild(el("span",
           "display:inline-block;margin-left:8px;padding:2px 7px;border:1px solid " + css.border +
@@ -290,6 +320,12 @@
     });
     footer.appendChild(links);
     mount.appendChild(footer);
+    if (track.rows.some(function (row) { return isCari4dBaseline(track, row); })) {
+      var note = el("p", "margin:12px 0 0;font-size:13px;line-height:1.6;color:" + css.muted,
+        "* We use a commercial friendly recreation of CARI4D with retrained weights and some non-commercial modules replaced. Performance may differ slightly from the original implementation.");
+      note.id = "v2d-cari4d-baseline-note";
+      mount.appendChild(note);
+    }
 
   }
 
