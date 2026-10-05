@@ -254,8 +254,14 @@ versions from CARI4D. Its required environment variables are carried into SSH.
    `--help` for depth/pointmap inputs and output paths. Inspect the generated mesh
    and apply the repository's mesh autoscaling workflow before CARI4D; generated
    scale remains an estimate, not a measured physical size.
-4. Run `python -m v2d.cari4d.lib.run_inference` with the video, packed masks,
-   scaled mesh, persistent CARI4D weights, and experiment output directory.
+4. Run `bash /vol/runpod-config/scripts/runpod/run_cari4d.sh` with the video,
+   packed masks, scaled mesh, persistent CARI4D weights, and experiment output
+   directory. It calls `python -m v2d.cari4d.lib.run_inference` directly with all
+   supplied flags. It sets CPU thread defaults (`OMP_NUM_THREADS=4`,
+   `MKL_NUM_THREADS=4`, `OPENBLAS_NUM_THREADS=1`) because the Pod may see the
+   host's CPU count even when its actual CPU quota is much lower. Override these
+   variables explicitly when profiling a different Pod. The helper lives in the
+   deployment worktree and does not require an image rebuild.
 
 The image pins Hugging Face Hub to a version compatible with transformers 5.3,
 and Warp to a CUDA 12 build. Avoid upgrading these packages in the base environment.

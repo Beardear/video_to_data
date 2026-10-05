@@ -76,7 +76,12 @@ class StorageTests(unittest.TestCase):
             mountpoint.write_text("#!/bin/sh\nexit 1\n")
             mountpoint.chmod(0o755)
             env = dict(os.environ, PATH=f"{bin_dir}{os.pathsep}{os.environ['PATH']}")
-            for path in ("runpod-image/start.sh", "scripts/runpod/bootstrap.sh", "scripts/runpod/init_volume.sh"):
+            for path in (
+                "runpod-image/start.sh",
+                "scripts/runpod/bootstrap.sh",
+                "scripts/runpod/init_volume.sh",
+                "scripts/runpod/run_cari4d.sh",
+            ):
                 with self.subTest(path=path):
                     result = subprocess.run(["bash", str(ROOT / path)], env=env,
                                             capture_output=True, text=True, timeout=5)
