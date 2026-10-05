@@ -24,7 +24,7 @@ jobs:
         run: |
           python3 scripts/runpod/check_branch.py
           python3 -m unittest discover -s scripts/runpod/tests -v
-          bash -n runpod-image/start.sh scripts/runpod/bootstrap.sh scripts/runpod/init_volume.sh
+          for script in runpod-image/start.sh scripts/runpod/*.sh; do bash -n "$script"; done
 
   build:
     needs: check

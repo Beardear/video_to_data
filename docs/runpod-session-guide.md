@@ -21,11 +21,22 @@ How to run the project on a Runpod A100, from any Mac or Windows computer.
 | Team working repo | `Beardear/video_to_data`, branch `main`. Business changes and PRs go here. |
 | Deployment source | The same repository, stable branch `docker-image`. |
 | Image namespace | `Beardear`; multiple maintainers may have package Write/Admin access. |
-| Team image (private, after a release) | `ghcr.io/beardear/v2d-runpod:<version>`; use the exact tag/digest from a successful build. |
-| Existing image before the first team release | `ghcr.io/melanieww/v2d-runpod:v1.1`; its existing administrators still manage access. |
+| Team image (private) | `ghcr.io/beardear/v2d-runpod:v1.2.1`; pin the digest below in your template. |
+| Original teammate image | `ghcr.io/melanieww/v2d-runpod:v1.1`; its existing administrators still manage access. |
 | GPU | A100 **80 GB** (SXM or PCIe). Never 40 GB. Avoid H100 for now. |
 | Code baked into the image | `/workspace/v2d_*` |
 | Your network volume | mounted at **`/vol`**: `video_to_data`, `runpod-config`, `data`, `weights`, `outputs`, `submission`, `cache`, `secrets` |
+
+Published `v1.2.1` image (`linux/amd64`):
+
+```text
+ghcr.io/beardear/v2d-runpod@sha256:0b18fc91831c8a6c7ba0449e6fa660f8debeb086043caa9b7f3c34f755473364
+```
+
+The [release build](https://github.com/Beardear/video_to_data/actions/runs/37321418970)
+uses image commit `9214bb97918f4bdbf6d3a7aad2fbeb4812970c6c` and business commit
+`7c0d3b94ce97b28deb571b4e7fdfeb5b2158df80`. Deployment helpers can have a newer
+commit than the image; record both when running an experiment.
 
 **What persists:** the image, your template, secrets, registry credential and network volume (`/vol`).
 **What doesn't:** the pod itself and its container disk (`/`, `/root`, `~/.bashrc`). Each session deploys a fresh pod.
@@ -131,7 +142,7 @@ Test it: `ssh -T git@github.com` should print `Hi <username>!`.
 | Field | Value |
 |---|---|
 | Type | Pod |
-| Container image | A published tag/digest; the existing `ghcr.io/melanieww/v2d-runpod:v1.1` remains usable with access until a team release is available |
+| Container image | The published team image digest in **Quick reference** |
 | Registry credential | `ghcr` |
 | Container disk | 50 GB |
 | Volume mount path | `/vol` |
@@ -254,6 +265,21 @@ versions from CARI4D. Its required environment variables are carried into SSH.
    `--help` for depth/pointmap inputs and output paths. Inspect the generated mesh
    and apply the repository's mesh autoscaling workflow before CARI4D; generated
    scale remains an estimate, not a measured physical size.
+   Inspect mesh complexity too. Dense SAM3D output can exceed a million faces.
+   The existing mesh module can create a smaller input while retaining vertex
+   colors; keep the original and inspect the simplified geometry and dimensions:
+
+   ```bash
+   # Set this to your experiment's mesh directory.
+   mesh_dir=/vol/outputs/episode_000016/baseline-inputs/sam3d_mesh
+   python -m v2d.mesh.lib.run_mesh_simplify \
+     --input_mesh "$mesh_dir/object_scaled.glb" \
+     --output_mesh "$mesh_dir/object_scaled_50k.glb" \
+     --face_count 50000
+   ```
+
+   Use the chosen mesh consistently throughout a new experiment. Changing it
+   affects pose estimation and refinement as well as rendering.
 4. Run `bash /vol/runpod-config/scripts/runpod/run_cari4d.sh` with the video,
    packed masks, scaled mesh, persistent CARI4D weights, and experiment output
    directory. It calls `python -m v2d.cari4d.lib.run_inference` directly with all
@@ -262,12 +288,51 @@ versions from CARI4D. Its required environment variables are carried into SSH.
    host's CPU count even when its actual CPU quota is much lower. Override these
    variables explicitly when profiling a different Pod. The helper lives in the
    deployment worktree and does not require an image rebuild.
+   For the validation profile below, also pass `--postopt_batch_size 16`. This
+   optimizes contiguous windows while retaining the full output timeline. It
+   differs from the default full-clip optimization batch, so record the value
+   when comparing results.
 
 The image pins Hugging Face Hub to a version compatible with transformers 5.3,
 and Warp to a CUDA 12 build. Avoid upgrading these packages in the base environment.
 Record any runtime dependency overrides along with the source commits and image
 digest; a modified running container is not evidence that the published image
 has passed the same checks.
+
+#### Verified single-episode profile (2026-10-05 UTC)
+
+Image `v1.2.1` completed all eight stages from scratch for `episode_000016`
+(360 frames, 30 fps), on one A100 80 GB PCIe with driver `595.91.07`.
+The published image needed no Python dependency overrides. Separate GPU checks
+also exercised SAM2 propagation on ten frames and SAM3D mesh generation.
+
+This profile uses manual person/object prompts, a depth-scaled SAM3D object mesh
+simplified with the existing mesh module to 50,000 faces, and 16-frame optimization
+batches for 300 iterations. Retain the original mesh and record the simplification
+with the experiment. For this object, the bounding-box change was under 0.9 mm;
+that check does not measure reconstruction accuracy against ground truth.
+
+After preparing these inputs in your own volume:
+
+```bash
+inputs=/vol/outputs/episode_000016/baseline-inputs
+bash /vol/runpod-config/scripts/runpod/run_cari4d.sh \
+  --video_path "$inputs/episode_000016.0.color.mp4" \
+  --mask_h5_path "$inputs/episode_000016_masks_k0.h5" \
+  --object_mesh_path "$inputs/sam3d_mesh/object_scaled_50k.glb" \
+  --weights_path /vol/weights/cari4d \
+  --output_dir /vol/outputs/episode_000016/cari4d-v1.2.1-50k \
+  --skip_weight_download --expected_frames 360 \
+  --postopt_batch_size 16 --postopt_num_steps 300
+```
+
+The validation checked finite prediction arrays, rotation-matrix orthogonality,
+and complete decoding of both 360-frame output videos. Pipeline stages totaled
+about 13 minutes 40 seconds, excluding input preparation. Kaggle metrics were
+not evaluated. A six-frame visual review found object-placement errors near the
+end of the clip; this is a runtime validation, not an accuracy acceptance test.
+Keep the pipeline report, exact command, input mesh, dependency
+versions, source commits and image digest alongside your results.
 
 ### 4.5 End the session
 
@@ -292,6 +357,7 @@ Then go to Runpod → Pod → **Terminate**. **The A100 bills every second it ru
 | `Permission denied (publickey)` from GitHub on the pod | On your computer, `ssh-add -l` must list your key, the key must be on GitHub (2.3), and you must connect with `-A`. |
 | Image pull `unauthorized` / `denied` | Check in order: Part 1 access was granted, the invitation was accepted (2.1), the token is **classic** with `read:packages` (2.4), and the credential uses **your** username (2.5a). |
 | GPU "Out of capacity" | Try the other A100 type, wait, or use "Deploy when available". Your volume can't change regions. |
+| `nvidia-smi` reports `Failed to initialize NVML: Unknown Error`, and new Python processes cannot see CUDA | Preserve outputs under `/vol`, then restart or redeploy the Pod and repeat the CUDA check before resuming. Completed CARI4D stages can be reused with the same inputs. Repeated access loss may require another host; see [NVIDIA's container-runtime troubleshooting](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/troubleshooting.html). This message alone does not establish the host-side cause. |
 | `HF_TOKEN` length 0, or HF 403 | Check the `HF_TOKEN` template variable and secret name, and that the dataset terms were accepted. |
 | Wrong Git author | Set `GIT_USER_NAME`/`GIT_USER_EMAIL` in the template. For now: `git config --global user.name "..."` and `user.email "..."`. |
 
