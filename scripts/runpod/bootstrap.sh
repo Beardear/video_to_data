@@ -21,4 +21,5 @@ grep -q "cd /vol/video_to_data" ~/.bashrc || cat >> ~/.bashrc <<'RC'
 cd /vol/video_to_data 2>/dev/null
 alias sam2py=/opt/venvs/sam2/bin/python
 RC
+grep -q '^alias sam3dpy=' ~/.bashrc || echo 'alias sam3dpy=/opt/venvs/sam3d/bin/python' >> ~/.bashrc
 echo "bootstrap done"

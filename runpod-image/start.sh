@@ -17,7 +17,7 @@ service ssh start || /usr/sbin/sshd
   umask 077
   for name in $(compgen -e); do
     case "$name" in
-      HF_*|KAGGLE_*|GITHUB_*|RUNPOD_*|GIT_USER_*|PATH|LD_LIBRARY_PATH|CUDA*|TORCH_HOME|PIP_CONSTRAINT|PYTHONPATH|PYOPENGL_PLATFORM|OPENCV_IO_ENABLE_OPENEXR)
+      HF_*|KAGGLE_*|GITHUB_*|RUNPOD_*|GIT_USER_*|PATH|LD_LIBRARY_PATH|CUDA*|TORCH_HOME|PIP_CONSTRAINT|PYTHONPATH|PYOPENGL_PLATFORM|OPENCV_IO_ENABLE_OPENEXR|LIDRA_SKIP_INIT|HYDRA_FULL_ERROR)
         printf 'export %s=%q\n' "$name" "${!name}" ;;
     esac
   done > /etc/rp_environment

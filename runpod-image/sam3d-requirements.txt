@@ -1,0 +1,11 @@
+# Runtime additions to the CARI4D base, validated on A100 / torch 2.5.1 cu124.
+astor==0.8.1
+cumm-cu124==0.7.11
+easydict==1.13
+gsplat==1.5.3
+igraph==1.0.0
+lightning==2.6.6
+plyfile==1.1.3
+pymeshfix==0.18.1
+pyvista==0.49.0
+spconv-cu124==2.3.8

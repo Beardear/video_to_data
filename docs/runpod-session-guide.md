@@ -163,7 +163,7 @@ Environment variables:
    tmux new -s init
    bash /vol/runpod-config/scripts/runpod/init_volume.sh
    ```
-   This sets up the folders and downloads the Track 1 data (~0.5 GB) and the CARI4D weights into `/vol/weights/cari4d`. Detach with `Ctrl+B`, then `D`. It's done when it prints `volume initialized`. If it's interrupted, rerun it; the download resumes.
+   With image v1.2.1 or newer, this sets up the folders and downloads Track 1 data (~0.5 GB), CARI4D weights into `/vol/weights/cari4d`, SAM2 weights into `/vol/weights/sam2`, and SAM3D Objects weights into `/vol/weights/sam3d`. The original v1.2.0 image initializes only data and CARI4D weights; upgrade its template before using the newer script. Detach with `Ctrl+B`, then `D`. It's done when it prints `volume initialized`. If it's interrupted, rerun it; completed downloads are reused.
 
 `/vol/video_to_data` is the business checkout. `/vol/runpod-config` is a deployment
 worktree sharing its Git objects, so scripts remain available when you switch
@@ -227,10 +227,41 @@ override must be configured explicitly and preserve FoundationPose/SAM 3D Body
 paths; otherwise release a new image containing the reviewed main-code change.
 Keep the producing business commit URL with submission artifacts.
 
-Port 8080 is an output-file browser, not a SAM2 annotation UI. The SAM2 venv exists,
-but toolkit annotation/mask entry points still need integration for full episodes.
+Port 8080 is an output-file browser, not a SAM2 annotation UI.
 For noninteractive SSH jobs, source `/etc/rp_environment` explicitly before Python;
 interactive sessions load it through `.bashrc`.
+
+#### Preparing full-episode inputs (v1.2.1 and newer)
+
+The image contains three Python environments. Use `python` for CARI4D and MoGe 2,
+`/opt/venvs/sam2/bin/python` for `v2d.sam2.lib.*`, and
+`/opt/venvs/sam3d/bin/python` for `v2d.sam3d.lib.*`. Bootstrap also adds interactive
+aliases `sam2py` and `sam3dpy`. All toolkit source is baked under `/workspace`.
+SAM3D shares the base CUDA libraries but isolates its older MoGe 1 / utils3d
+versions from CARI4D. Its required environment variables are carried into SSH.
+
+1. Copy the selected video into an experiment directory under `/vol/outputs`
+   with the name `<sequence>.0.color.mp4`. Do not use a differently named source
+   through a symlink: the mask packer resolves symlinks before checking the name.
+2. Prepare SAM2 prompts for person ID `0` and object ID `1`, then run
+   `sam2py -m v2d.sam2.lib.video_to_masks` with the input video, prompts, masks
+   directory, and `/vol/weights/sam2`. Run `python -m v2d.cari4d.lib.pack_masks`
+   to validate matching frame counts and produce the H5 input.
+3. When no object mesh is supplied, select a clear frame and its matching object
+   mask. Run `sam3dpy -m v2d.sam3d.lib.image_to_mesh` with
+   `/vol/weights/sam3d`. Set `HF_HOME=/vol/weights/sam3d/hf_home` and
+   `TORCH_HOME=/vol/weights/sam3d/torch_home` for this command. Use the module's
+   `--help` for depth/pointmap inputs and output paths. Inspect the generated mesh
+   and apply the repository's mesh autoscaling workflow before CARI4D; generated
+   scale remains an estimate, not a measured physical size.
+4. Run `python -m v2d.cari4d.lib.run_inference` with the video, packed masks,
+   scaled mesh, persistent CARI4D weights, and experiment output directory.
+
+The image pins Hugging Face Hub to a version compatible with transformers 5.3,
+and Warp to a CUDA 12 build. Avoid upgrading these packages in the base environment.
+Record any runtime dependency overrides along with the source commits and image
+digest; a modified running container is not evidence that the published image
+has passed the same checks.
 
 ### 4.5 End the session
 
