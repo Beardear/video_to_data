@@ -2,6 +2,9 @@
 
 Docker-based modules for video reconstruction, depth estimation, object detection, segmentation, mesh generation, pose tracking, and human body modeling.
 
+For the Track 1 challenge, start with the [input inventory](docs/track1_preflight.md)
+to check episode metadata and prepared input paths before running reconstruction.
+
 ## Quickstart (MOGE)
 
 Minimal example using MOGE. From `reconstruction/`:
