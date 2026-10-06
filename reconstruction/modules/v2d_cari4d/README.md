@@ -149,6 +149,27 @@ Stage 6 always invokes CoCoNet with the internal `--offline-supervision-contract
 For Track 1 submission-format results, see the [episode export adapter](../../docs/track1_export.md).
 Before inference, run the [prepared-input content validator](../../docs/track1_preflight.md#prepared-input-content-validation)
 to check decoded frames, masks, mesh geometry, and recorded scale provenance.
+
+### Experiment identity and resuming
+
+Each episode's inference directory is bound by `run_identity.json` to input and
+weight content hashes, runtime source hashes (including uncommitted edits),
+Python/package versions, and inference settings. Stage markers include this
+identity and hashes of their own inputs and outputs. A second invocation can
+reuse verified stages or continue an interrupted run only with the same identity.
+A per-episode process lock prevents concurrent writers.
+
+Use a **new `output_dir`** after changing code, input bytes, weights, runtime, or
+parameters. `--overwrite` reruns stages within the same experiment; it cannot
+bypass the identity boundary or adopt older outputs without an identity record.
+Keep legacy experiment directories intact. Re-reading content adds I/O overhead
+but detects changes even when file sizes and timestamps match. A run that fails
+or observes changing source/input files does not publish a new PASS report.
+
+The identity records the actual runtime source paths, including image-installed
+dependencies. It is separate from deployment provenance: experiment records must
+still include the business commit, image build commit, and immutable image digest.
+Hashing source is not evidence that a GPU run or accuracy evaluation succeeded.
 It converts the refined human through the official MHR mesh fitter and retains
 the aligned object mesh/pose pair, with explicit conversion-error checks.
 
