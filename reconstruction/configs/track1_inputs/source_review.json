@@ -1,0 +1,397 @@
+{
+  "schema": "v2d.track1.prompt_source_review.v1",
+  "reviewed_by": "assistant",
+  "mask_acceptance": "pending",
+  "episodes": [
+    {
+      "episode_index": 0,
+      "object": "hula_hoop",
+      "source_video_sha256": "1eb6293e4552397668a5013adbcee95e0bf230dd8c79a594aa7d7f8ea4991ab1",
+      "source_image_size": [
+        1536,
+        1152
+      ],
+      "prompt_frame": 0,
+      "reference_frame": 0,
+      "prompt_sha256": "17510231863177efba47198b056e4666527038484ad186bed877e0b31d2ebccc",
+      "review": "reference frame and object crop inspected; generated masks still require review"
+    },
+    {
+      "episode_index": 1,
+      "object": "hula_hoop",
+      "source_video_sha256": "1198635d7f04f73aa9466e02d105fa89b3630b2aa92a5e4f249898023ecfed30",
+      "source_image_size": [
+        1536,
+        1152
+      ],
+      "prompt_frame": 0,
+      "reference_frame": 0,
+      "prompt_sha256": "696fb3780c8143239539a5983467dea3c9ab8fbd503f42ce7185744646d23ed0",
+      "review": "reference frame and object crop inspected; generated masks still require review"
+    },
+    {
+      "episode_index": 2,
+      "object": "hula_hoop",
+      "source_video_sha256": "2ccb43dd362c2a430d341611e888ef1ea79e3a3989e8af2a015d34e0b2196747",
+      "source_image_size": [
+        1536,
+        1152
+      ],
+      "prompt_frame": 0,
+      "reference_frame": 0,
+      "prompt_sha256": "5cebe7e159e18b3306a223d6a56f01136973eae696e36566724f7631740d869a",
+      "review": "reference frame and object crop inspected; generated masks still require review"
+    },
+    {
+      "episode_index": 3,
+      "object": "big_red_bowl",
+      "source_video_sha256": "8eb7153abeeb32895741d80dc79305143967b701094af2eea9321260577a6b39",
+      "source_image_size": [
+        1536,
+        1152
+      ],
+      "prompt_frame": 0,
+      "reference_frame": 0,
+      "prompt_sha256": "5471ed1679b2812dd29f5dc421ada3493ebd34fd8e70805bcb722adcb669c725",
+      "review": "reference frame and object crop inspected; generated masks still require review"
+    },
+    {
+      "episode_index": 4,
+      "object": "big_red_bowl",
+      "source_video_sha256": "f1cadfa308b37dc91a3f296c2e5a2b538236cbe8a76d76d651df19554386cce6",
+      "source_image_size": [
+        1536,
+        1152
+      ],
+      "prompt_frame": 0,
+      "reference_frame": 0,
+      "prompt_sha256": "9cdf0eeff5d0175ecfd042d22dbc08ccfb30ea2cbb411efe5021cf782febd108",
+      "review": "reference frame and object crop inspected; generated masks still require review"
+    },
+    {
+      "episode_index": 5,
+      "object": "big_red_bowl",
+      "source_video_sha256": "9613c76d9a4f9f34ecaf7697f2129ee2c59b6b03b0f014ee531a53d1fe39c30e",
+      "source_image_size": [
+        1536,
+        1152
+      ],
+      "prompt_frame": 0,
+      "reference_frame": 0,
+      "prompt_sha256": "ed1070cd998b33177c31546ca140a99f37360a6cc5555b2f9d0cbcc174dd777d",
+      "review": "reference frame and object crop inspected; generated masks still require review"
+    },
+    {
+      "episode_index": 6,
+      "object": "iron",
+      "source_video_sha256": "295db21337393fc4ffbb0a872c4156580cfe1fbda26bf1df211b07cfecf979e4",
+      "source_image_size": [
+        1536,
+        1152
+      ],
+      "prompt_frame": 0,
+      "reference_frame": 0,
+      "prompt_sha256": "4bb8f555471012890b772dd6eaf16f08cfa3c18d3b0e7ca14f0be9f4e5405102",
+      "review": "reference frame and object crop inspected; generated masks still require review"
+    },
+    {
+      "episode_index": 7,
+      "object": "iron",
+      "source_video_sha256": "e76d386123f8221e390d9accd35d8d19794efb1279d78a02a0e56553e4f9948d",
+      "source_image_size": [
+        1536,
+        1152
+      ],
+      "prompt_frame": 0,
+      "reference_frame": 0,
+      "prompt_sha256": "65eed5b2f8bca8179588ce08141f29c414cf21c9802ea257e491543c2cc91b62",
+      "review": "reference frame and object crop inspected; generated masks still require review"
+    },
+    {
+      "episode_index": 8,
+      "object": "iron",
+      "source_video_sha256": "7f2967bd12518ded44094c9ac397bed826c572f7cbfbab7c9909735a240c2770",
+      "source_image_size": [
+        1536,
+        1152
+      ],
+      "prompt_frame": 0,
+      "reference_frame": 0,
+      "prompt_sha256": "3a7117088fab8575c36fa8ecfdc314d324d4b7f60afe07552279294924e2f63b",
+      "review": "reference frame and object crop inspected; generated masks still require review"
+    },
+    {
+      "episode_index": 9,
+      "object": "white_desk",
+      "source_video_sha256": "4fe69ca521fc2717e2938339b0a37843ada391f4b074753584c7cd8c2e36a277",
+      "source_image_size": [
+        1536,
+        1152
+      ],
+      "prompt_frame": 0,
+      "reference_frame": 0,
+      "prompt_sha256": "74c146198c3260b031c11fc1d55b8c8f431c8f73d836d1e7aa57e2bef3005848",
+      "review": "reference frame and object crop inspected; generated masks still require review"
+    },
+    {
+      "episode_index": 10,
+      "object": "white_desk",
+      "source_video_sha256": "4a75aec2a5d5621295979c8cd4b8b7c346c24ff6e9a4241b39dcfda623e94c39",
+      "source_image_size": [
+        1536,
+        1152
+      ],
+      "prompt_frame": 0,
+      "reference_frame": 0,
+      "prompt_sha256": "c3d63429423babd41eee9d4c4c57be7e91b675df3104e4fe701ff2dcf2506dee",
+      "review": "reference frame and object crop inspected; generated masks still require review"
+    },
+    {
+      "episode_index": 11,
+      "object": "white_desk",
+      "source_video_sha256": "1b5c95978413d92320b4a5ac4e1094194966f2e1eb399143ded367bb682eec40",
+      "source_image_size": [
+        1536,
+        1152
+      ],
+      "prompt_frame": 0,
+      "reference_frame": 0,
+      "prompt_sha256": "224753e273514145b82a2e22d338e7ecb9007206f8dd2e7d73ac490715dee67b",
+      "review": "reference frame and object crop inspected; generated masks still require review"
+    },
+    {
+      "episode_index": 12,
+      "object": "black_pan",
+      "source_video_sha256": "6494246c131a9161eb342c615ea835988d254b9c09abb659349bdb05e6935b39",
+      "source_image_size": [
+        1536,
+        1152
+      ],
+      "prompt_frame": 0,
+      "reference_frame": 0,
+      "prompt_sha256": "6484f7bd31b0d6d67331fe8eeea77bcc6322305f8cdc4a12f2d6616283c53812",
+      "review": "reference frame and object crop inspected; generated masks still require review"
+    },
+    {
+      "episode_index": 13,
+      "object": "black_pan",
+      "source_video_sha256": "fa74d6754b90eebc9513909e8570dfd2dd7726c71dba16df45cb17cc49e79f1a",
+      "source_image_size": [
+        1536,
+        1152
+      ],
+      "prompt_frame": 0,
+      "reference_frame": 0,
+      "prompt_sha256": "1803da465ab8767db4bef5c2fa82798132519a43f2d8b6f1f146da36bc022dd6",
+      "review": "reference frame and object crop inspected; generated masks still require review"
+    },
+    {
+      "episode_index": 14,
+      "object": "black_pan",
+      "source_video_sha256": "f9f2bed8abe60898aef8f62c245ff03ed32f94b76b079c128e363fdfd4a7e70e",
+      "source_image_size": [
+        1536,
+        1152
+      ],
+      "prompt_frame": 0,
+      "reference_frame": 0,
+      "prompt_sha256": "fedbe9bbb43f0206659ccc92fe205c0239790f096517382859735520460b0f1a",
+      "review": "reference frame and object crop inspected; generated masks still require review"
+    },
+    {
+      "episode_index": 15,
+      "object": "foam_grass_block",
+      "source_video_sha256": "c368809329e922b75629c1d94c39c1c820c9211464a5e5a77a4cdb55803400f0",
+      "source_image_size": [
+        1536,
+        1152
+      ],
+      "prompt_frame": 0,
+      "reference_frame": 0,
+      "prompt_sha256": "6b3a3606e0d28d7c63286e02fe05f4a27724a0a81f9f5aa1ea676f598e751d5d",
+      "review": "reference frame and object crop inspected; generated masks still require review"
+    },
+    {
+      "episode_index": 16,
+      "object": "foam_grass_block",
+      "source_video_sha256": "a37a978ef0f3d0eeaad74f2ed75fb32502d8a1a047587291c14433d052f9eb74",
+      "source_image_size": [
+        1536,
+        1152
+      ],
+      "prompt_frame": 0,
+      "reference_frame": 0,
+      "prompt_sha256": "78a498e07be5725c2fe46656e3a6f021257ad4317cda3827ed4eeb40a6ac59dd",
+      "review": "reference frame and object crop inspected; generated masks still require review"
+    },
+    {
+      "episode_index": 17,
+      "object": "foam_grass_block",
+      "source_video_sha256": "4c536c20aff3e803c0d5caf1f91b0dfab1054444361fdae2799212e5af15a94b",
+      "source_image_size": [
+        1536,
+        1152
+      ],
+      "prompt_frame": 0,
+      "reference_frame": 0,
+      "prompt_sha256": "0b00956d9b83ac4162b2fdfd8a8db81f8007a3283800e1e97d6329b370a857b6",
+      "review": "reference frame and object crop inspected; generated masks still require review"
+    },
+    {
+      "episode_index": 18,
+      "object": "paint_roller",
+      "source_video_sha256": "e65132e95b0755a720c5e5238654a6fb8a01cd9e5d13fe481bcbb5e5612e44bd",
+      "source_image_size": [
+        1536,
+        1152
+      ],
+      "prompt_frame": 0,
+      "reference_frame": 0,
+      "prompt_sha256": "e891c72a6fc030f11f57eba5da2ebe39adcf3ee857dfe5be900eb7e7bc867c3f",
+      "review": "reference frame and object crop inspected; generated masks still require review"
+    },
+    {
+      "episode_index": 19,
+      "object": "paint_roller",
+      "source_video_sha256": "730e8392a32944856b3f9e2b02e57c48ba955e0832cfaf40e06d2de72a3a3bc9",
+      "source_image_size": [
+        1536,
+        1152
+      ],
+      "prompt_frame": 0,
+      "reference_frame": 0,
+      "prompt_sha256": "81dc9f6bfc37a9beee66674e7c75e3b00dbcf997891ec5a41cd3dfdfa0b66519",
+      "review": "reference frame and object crop inspected; generated masks still require review"
+    },
+    {
+      "episode_index": 20,
+      "object": "paint_roller",
+      "source_video_sha256": "781ec1de0edcf8bf30cbc9f3847f80efd8cd2e97e53b0b4f80ccb0b505ef03ce",
+      "source_image_size": [
+        1536,
+        1152
+      ],
+      "prompt_frame": 0,
+      "reference_frame": 0,
+      "prompt_sha256": "28bd150e0c005a608e98aee622ab172d7fe80e7434f42016f7ff224f9bbfd0ab",
+      "review": "reference frame and object crop inspected; generated masks still require review"
+    },
+    {
+      "episode_index": 21,
+      "object": "pink_foam_roll",
+      "source_video_sha256": "66443de1239172913edf324e9d4affb960883c99ca4f9e307a7ec76a9264adec",
+      "source_image_size": [
+        1536,
+        1152
+      ],
+      "prompt_frame": 0,
+      "reference_frame": 0,
+      "prompt_sha256": "64d757f739998db224e060dbfd946a8cd7742dc308325a2ec12e159bdebd6c68",
+      "review": "reference frame and object crop inspected; generated masks still require review"
+    },
+    {
+      "episode_index": 22,
+      "object": "pink_foam_roll",
+      "source_video_sha256": "17e2de04b320c3ff3004f659326cbacfb51402af19c9564ffc4f1fed88fadad0",
+      "source_image_size": [
+        1536,
+        1152
+      ],
+      "prompt_frame": 0,
+      "reference_frame": 0,
+      "prompt_sha256": "4424fca09823d145afc72de9146699918f563cecd152a012fe2b339ba6cd8ad2",
+      "review": "reference frame and object crop inspected; generated masks still require review"
+    },
+    {
+      "episode_index": 23,
+      "object": "pink_foam_roll",
+      "source_video_sha256": "4b132f8efe20da727f2d5fd7ba56835cf08b032f11e6dc2800f26bfcfff0f0b5",
+      "source_image_size": [
+        1536,
+        1152
+      ],
+      "prompt_frame": 0,
+      "reference_frame": 0,
+      "prompt_sha256": "5204e61be1ce52a3decf7125a89fe4664256bd5df35e799ae7226993886eb047",
+      "review": "reference frame and object crop inspected; generated masks still require review"
+    },
+    {
+      "episode_index": 24,
+      "object": "short_wood_stool",
+      "source_video_sha256": "e36eda1c9ac7f6a1da298412c301da27775055df4c6ff19167f6b1a8c504d2ef",
+      "source_image_size": [
+        1536,
+        1152
+      ],
+      "prompt_frame": 0,
+      "reference_frame": 0,
+      "prompt_sha256": "53fee5016303e134973c197e04a0e8e7a171a9e151c6e955977a8b077df07e08",
+      "review": "reference frame and object crop inspected; generated masks still require review"
+    },
+    {
+      "episode_index": 25,
+      "object": "short_wood_stool",
+      "source_video_sha256": "efcce8025e4e94ed92553277bc6fddd5ae7c8d7c7e70d71d09ff9a86a1ea3ae0",
+      "source_image_size": [
+        1536,
+        1152
+      ],
+      "prompt_frame": 0,
+      "reference_frame": 0,
+      "prompt_sha256": "c8720d7b73d5eb638f44048ad99a09b5d4f43664681c9187e5ef73438373447b",
+      "review": "reference frame and object crop inspected; generated masks still require review"
+    },
+    {
+      "episode_index": 26,
+      "object": "short_wood_stool",
+      "source_video_sha256": "9cf9112417778299780a3e2a7f009d38bbf24059149eaa1591b8df02551607a4",
+      "source_image_size": [
+        1536,
+        1152
+      ],
+      "prompt_frame": 0,
+      "reference_frame": 0,
+      "prompt_sha256": "13f8347b652f0483acaabd5bc8a7139b28c6957d2c79bb9f44e0092cf7ab0e04",
+      "review": "reference frame and object crop inspected; generated masks still require review"
+    },
+    {
+      "episode_index": 27,
+      "object": "white_laptop_cart",
+      "source_video_sha256": "07790526fc281dfb37f84cc9fa4cc25925e7e8fa6cd5600fd5cd9179ecd03e37",
+      "source_image_size": [
+        1536,
+        1152
+      ],
+      "prompt_frame": 0,
+      "reference_frame": 0,
+      "prompt_sha256": "da986e5e34f333af4ea39d18df3defdc5057e091621e2f029b683a6e94d55112",
+      "review": "reference frame and object crop inspected; generated masks still require review"
+    },
+    {
+      "episode_index": 28,
+      "object": "white_laptop_cart",
+      "source_video_sha256": "9f84471dcd5e44113cc21e5bd40e8877ad6c5bcc1ba1d03cfdbc866b8df61538",
+      "source_image_size": [
+        1536,
+        1152
+      ],
+      "prompt_frame": 0,
+      "reference_frame": 0,
+      "prompt_sha256": "1cad8019784e57f0521e347ff680e67d633795982398bb61cd35d8a90978b8cd",
+      "review": "reference frame and object crop inspected; generated masks still require review"
+    },
+    {
+      "episode_index": 29,
+      "object": "white_laptop_cart",
+      "source_video_sha256": "0a2288f183e4d0fffff1c55688c1ea27c09e60588dfc9f52c10137b3abc1b5e1",
+      "source_image_size": [
+        1536,
+        1152
+      ],
+      "prompt_frame": 0,
+      "reference_frame": 0,
+      "prompt_sha256": "adf1500bc32d35c3cdcf89408f623e8ed41e98ac919675c011f75fea7d02c0ba",
+      "review": "reference frame and object crop inspected; generated masks still require review"
+    }
+  ]
+}
