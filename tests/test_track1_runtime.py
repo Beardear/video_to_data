@@ -34,6 +34,21 @@ def test_failed_process_retains_stderr_and_exit_status(tmp_path):
     assert "failure" in invocation.log_path.read_text()
 
 
+def test_invocation_environment_is_isolated_and_runtime_versions_are_recorded(tmp_path, monkeypatch):
+    monkeypatch.setenv("TRACK1_TEST_ENV", "parent")
+    invocation = ModuleInvocation("environment", (sys.executable, "-c",
+        "import os; print(os.environ['TRACK1_TEST_ENV'])"), tmp_path / "environment.log",
+        {"TRACK1_TEST_ENV": "child"})
+    runtime = Track1Runtime(tmp_path, "container")
+    runtime.execute(invocation, 10)
+    assert invocation.log_path.read_text().strip() == "child"
+    import os
+    assert os.environ["TRACK1_TEST_ENV"] == "parent"
+    versions = runtime.package_versions()
+    assert versions["executable"] == sys.executable
+    assert any(name.lower() == "pytest" for name, version in versions["packages"])
+
+
 def test_package_origin_check_detects_a_different_checkout(tmp_path):
     runtime = Track1Runtime(tmp_path, "container")
     with pytest.raises(ValueError, match="not installed from"):

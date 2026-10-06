@@ -10,7 +10,8 @@ dataset metadata + prepared-input manifest
   → per-episode logs and aggregate batch report
 ```
 
-Input preparation is separate. Every selected episode needs the three input
+Input preparation uses [the separate preparation runner](track1_prepare.md).
+Every selected episode needs the three input
 paths described in [the inventory](track1_preflight.md), plus a
 `mesh_scale_report_path`. The scale record is checked before inference. The
 runner never invents masks, substitutes meshes, downloads weights, creates a GPU,

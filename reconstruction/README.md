@@ -4,6 +4,9 @@ Docker-based modules for video reconstruction, depth estimation, object detectio
 
 For the Track 1 challenge, start with the [input inventory](docs/track1_preflight.md)
 to check episode metadata and prepared input paths before running reconstruction.
+Use the [input preparation runner](docs/track1_prepare.md) to build verified masks
+and static meshes, then the [batch runner](docs/track1_batch.md) to plan and execute
+reconstruction. Both default to planning without starting models.
 
 ## Quickstart (MOGE)
 

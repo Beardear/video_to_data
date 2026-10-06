@@ -74,6 +74,7 @@ def run_video_to_masks(
     masks_dir: str,
     weights_dir: str,
     dev: bool = False,
+    *, mask_extension: str = "",
 ) -> None:
     rewritten_path, extra_volumes, tempdir = _rewrite_prompts_for_container(
         prompts_path,
@@ -88,6 +89,7 @@ def run_video_to_masks(
                 "weights_dir": weights_dir,
             },
             outputs={"masks_dir": masks_dir},
+            extra_args={"mask_extension": mask_extension},
             dev=dev,
             modules_dir=MODULES_DIR,
             gpus=True,
@@ -107,5 +109,7 @@ if __name__ == "__main__":
     parser.add_argument("--masks_dir", type=str, required=True, help="Output directory for masks")
     parser.add_argument("--weights_dir", type=str, required=True, help="Path to SAM2 weights directory")
     parser.add_argument("--dev", action="store_true", help="Mount local modules for development")
+    parser.add_argument("--mask_extension", default="", help="Output stream suffix; .h5 stores each object in one file")
     args = parser.parse_args()
-    run_video_to_masks(args.video_path, args.prompts_path, args.masks_dir, args.weights_dir, dev=args.dev)
+    run_video_to_masks(args.video_path, args.prompts_path, args.masks_dir, args.weights_dir,
+                      dev=args.dev, mask_extension=args.mask_extension)

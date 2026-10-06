@@ -20,7 +20,7 @@ dependencies = [
 # Other runtime dependencies are local packages installed via scripts/install_packages.sh
 
 [project.optional-dependencies]
-track1 = ["pandas", "pyarrow", "fast_simplification"]
+track1 = ["pandas", "pyarrow", "fast_simplification", "v2d-common[io]"]
 
 [tool.setuptools]
 packages = ["v2d.pipelines"]

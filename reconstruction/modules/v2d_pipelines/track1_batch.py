@@ -24,6 +24,7 @@ from v2d.pipelines.track1_preflight import (
     INPUT_ROLES, Track1Episode, track1_episodes, track1_metadata_identity, track1_prepared_inputs,
 )
 from v2d.pipelines.track1_runtime import ModuleInvocation, Track1Runtime
+from v2d.pipelines.track1_experiment import checkout_identity, weight_identity
 
 
 REPOSITORY = Path(__file__).resolve().parents[3]
@@ -74,24 +75,11 @@ def _settings(path: Path) -> BaselineSettings:
 
 
 def _checkout_identity(execute: bool) -> dict[str, Any]:
-    def git(*args):
-        return subprocess.run(["git", "-C", str(REPOSITORY), *args], check=True,
-                              capture_output=True, text=True).stdout.strip()
-    commit = git("rev-parse", "HEAD")
-    dirty = git("status", "--porcelain", "--untracked-files=normal")
-    if execute and dirty:
-        raise ValueError("Commit the business checkout before executing a batch; planning permits uncommitted edits")
-    return {"repository": str(REPOSITORY), "business_commit": commit, "dirty": bool(dirty)}
+    return checkout_identity(REPOSITORY, execute)
 
 
 def _weight_identity(root: Path) -> dict[str, dict[str, Any]]:
-    excluded = {".git", "__pycache__", ".cache", ".locks"}
-    files = {str(p.relative_to(root)): artifact_record(p) for p in sorted(root.rglob("*"))
-             if p.is_file() and not excluded.intersection(p.relative_to(root).parts)
-             and p.suffix not in {".pyc", ".lock"}}
-    if not files:
-        raise FileNotFoundError(f"Weights directory is missing or empty: {root}")
-    return files
+    return weight_identity(root)
 
 
 def _commands(episode: Track1Episode, paths: dict[str, Path], output: Path, weights: Path, kit: Path,

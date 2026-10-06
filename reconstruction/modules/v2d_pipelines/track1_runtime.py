@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import json
 import os
 from pathlib import Path
@@ -18,6 +18,7 @@ class ModuleInvocation:
     name: str
     command: tuple[str, ...]
     log_path: Path
+    environment: Mapping[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -61,10 +62,19 @@ class Track1Runtime:
             if str(expected.resolve()) not in {str(Path(p).resolve()) for p in resolved[name]}:
                 raise ValueError(f"{name} is not installed from {expected}; install this checkout before execution")
 
+    def package_versions(self) -> dict[str, Any]:
+        probe = ("import json,sys; from importlib import metadata; "
+                 "print(json.dumps({'python':sys.version,'executable':sys.executable,"
+                 "'packages':sorted([d.metadata['Name'],d.version] for d in metadata.distributions() "
+                 "if d.metadata['Name'])}))")
+        result = subprocess.run([self.python, "-c", probe], check=True, capture_output=True,
+                                text=True, timeout=60)
+        return json.loads(result.stdout)
+
     def execute(self, invocation: ModuleInvocation, timeout_seconds: float) -> None:
         """Terminate the process group on timeout or cancellation; retain the log."""
         invocation.log_path.parent.mkdir(parents=True, exist_ok=True)
-        environment = {**os.environ, "PYTHONUNBUFFERED": "1"}
+        environment = {**os.environ, "PYTHONUNBUFFERED": "1", **invocation.environment}
         container_name = f"v2d-track1-{uuid.uuid4().hex}" if self.mode == "docker" else None
         if container_name is not None:
             environment["V2D_DOCKER_CONTAINER_NAME"] = container_name
