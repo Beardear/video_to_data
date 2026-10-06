@@ -55,8 +55,65 @@ unchecked. A zero exit code is not permission to reuse inference outputs or
 evidence of successful reconstruction. Scan the mounted cloud volume separately
 to inspect its inputs; a local inventory describes only local files.
 
+## Prepared-input content validation
+
+After preparing an episode, use the CARI4D container's CPU checker. It loads no
+model and requires no GPU:
+
+```bash
+python -m v2d.cari4d.docker.run_validate_inputs \
+  --video_path /data/inputs/episode_000016.0.color.mp4 \
+  --source_video_path /data/track_1/videos/chunk-000/observation.images.exo_camera/episode_000016.mp4 \
+  --mask_h5_path /data/inputs/episode_000016_masks_k0.h5 \
+  --object_mesh_path /data/inputs/object_scaled.glb \
+  --mesh_scale_report_path /data/inputs/mesh_scale.json \
+  --require_scale_provenance --expected_frames 360 --expected_fps 30 \
+  --report_path /data/inputs/validation.json --dev
+```
+
+Inside an existing container, invoke `v2d.cari4d.lib.validate_inputs` with the
+same arguments except `--dev`. Counts and FPS must come from dataset metadata.
+The report hashes all inputs, fully decodes the video, checks timestamps and
+dimensions, checks exact HDF5 frame/role keys and binary masks, and validates
+mesh vertices, faces and surface area after applying scene-node transforms.
+Human masks must be nonempty. The object mask must be nonempty on frame zero;
+later empty object masks are explicit occlusion warnings. Non-watertight meshes
+also produce warnings. Inspect warnings before scheduling an expensive run.
+
+The optional scale record has this contract (hashes are full SHA-256 values):
+
+```json
+{
+  "schema": "v2d.track1.mesh_scale.v1",
+  "units": "metres",
+  "method": "depth_alignment",
+  "reference_frame": 0,
+  "applied_scale": [0.12, 0.12, 0.12],
+  "mesh_sha256": "<hash of the scaled mesh>",
+  "source_video_sha256": "<hash of the dataset video>"
+}
+```
+
+Record actual preparation measurements, never guessed scale factors. Supported
+methods are `depth_alignment`, `sam3d_pointmap`, and `measured`. The record binds
+the method, positive scale factors, and reference frame to these exact files;
+it does not prove physical scale against ground truth. Additional preparation
+evidence may be stored in the same record. Missing scale records warn by default
+and fail when `--require_scale_provenance` is set. Supplying an inconsistent
+record always fails.
+
+The CLI exits `0` for `PASS`, `2` for content `FAIL`, and nonzero on an unreadable
+or corrupt input. A caller must require a successful exit and a `PASS` report
+from the current invocation; an old report never overrides a read failure.
+Segmentation semantics, reconstruction accuracy, and GPU execution remain
+unverified. Content validation is a separate step from the lightweight inventory.
+
 CPU-only contract tests, from the repository root:
 
 ```bash
 python -m unittest discover -s reconstruction/modules/v2d_pipelines/tests -p 'test_track1_preflight.py' -v
+python -m pytest reconstruction/modules/v2d_cari4d/tests/test_validate_inputs.py -q
 ```
+
+The content tests need CPU packages `av`, `h5py`, `numpy`, `scipy`, `trimesh`, and
+`pytest`; no PyTorch or weights are required.

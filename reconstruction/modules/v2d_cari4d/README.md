@@ -147,6 +147,8 @@ Stage 6 always invokes CoCoNet with the internal `--offline-supervision-contract
 ## Validation
 
 For Track 1 submission-format results, see the [episode export adapter](../../docs/track1_export.md).
+Before inference, run the [prepared-input content validator](../../docs/track1_preflight.md#prepared-input-content-validation)
+to check decoded frames, masks, mesh geometry, and recorded scale provenance.
 It converts the refined human through the official MHR mesh fitter and retains
 the aligned object mesh/pose pair, with explicit conversion-error checks.
 
