@@ -1,4 +1,4 @@
-"""Content identities and atomic JSON records for reconstruction artifacts."""
+"""Content identities and atomic JSON records for file-based pipeline artifacts."""
 
 from __future__ import annotations
 

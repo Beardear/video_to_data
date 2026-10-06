@@ -23,7 +23,7 @@ SAM3D_SOURCE_ROOT = Path("/workspace/v2d_sam3d_body/lib")
 PIPELINE_SCHEMA = "v2d.cari4d.wild_inference.v1"
 if str(SOURCE_ROOT) not in sys.path:
     sys.path.insert(0, str(SOURCE_ROOT))
-from lib_mhr.artifacts import artifact_record, atomic_json
+from v2d.common.artifacts import artifact_record, atomic_json
 from lib_mhr.run_cache import bind_run, episode_run_lock, run_identity
 
 

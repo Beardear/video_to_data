@@ -92,6 +92,15 @@ def export_track1(
     if (pipeline.get("schema") != "v2d.cari4d.wild_inference.v1"
             or pipeline.get("sequence") != sequence or pipeline.get("verdict") != "PASS"):
         raise ValueError("Pipeline report must identify this successfully reconstructed episode")
+    inference_settings = pipeline.get("defaults", {})
+    if pipeline.get("run_identity") is not None:
+        identity_path = result / "run_identity.json"
+        identity = json.loads(identity_path.read_text())
+        if (identity.get("schema") != "v2d.cari4d.run_identity.v1"
+                or identity.get("sha256") != pipeline["run_identity"].get("sha256")):
+            raise ValueError("Inference identity does not match its pipeline report")
+        inference_settings = identity["settings"]
+        inputs["inference_identity"] = identity_path
     object_mesh = load_object_mesh(mesh)
     if (len(object_mesh.vertices) == 0 or len(object_mesh.faces) == 0
             or not np.isfinite(object_mesh.vertices).all() or not np.isfinite(object_mesh.area)
@@ -140,6 +149,7 @@ def export_track1(
             "schema": "v2d.cari4d.track1_export.v1", "sequence": sequence,
             "frames": expected_frames, "business_commit": business_commit,
             "inference_run_identity": pipeline.get("run_identity"),
+            "inference_settings": inference_settings,
             "image_build_commit": image_build_commit, "image_digest": image_digest,
             "input_sha256": input_hashes,
             "export_source_sha256": source_hashes,

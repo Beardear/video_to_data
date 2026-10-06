@@ -13,7 +13,7 @@ import platform
 import sys
 from typing import Any, Callable, Mapping
 
-from .artifacts import artifact_record, atomic_json
+from v2d.common.artifacts import artifact_record, atomic_json
 
 
 SOURCE_SUFFIXES = {".py", ".yaml", ".yml", ".json", ".toml", ".txt", ".cpp", ".cu", ".h",

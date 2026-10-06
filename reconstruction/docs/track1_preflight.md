@@ -116,4 +116,7 @@ python -m pytest reconstruction/modules/v2d_cari4d/tests/test_validate_inputs.py
 ```
 
 The content tests need CPU packages `av`, `h5py`, `numpy`, `scipy`, `trimesh`, and
-`pytest`; no PyTorch or weights are required.
+`pytest`, plus the current `v2d-common` checkout installed with
+`pip install -e reconstruction/modules/v2d_common`; no PyTorch or weights are
+required. Update this shared package in a Pod too when running new business code
+against an older image.

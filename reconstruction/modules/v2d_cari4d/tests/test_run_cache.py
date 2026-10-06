@@ -15,7 +15,7 @@ import pytest
 
 MODULE = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(MODULE / "lib/cari4d"))
-from lib_mhr.artifacts import artifact_record, atomic_json
+from v2d.common.artifacts import artifact_record, atomic_json
 from lib_mhr.run_cache import bind_run, episode_run_lock, run_identity, source_identity
 
 

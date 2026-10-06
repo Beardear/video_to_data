@@ -15,7 +15,7 @@ import sys
 SOURCE_ROOT = Path(__file__).resolve().parent / "cari4d"
 if str(SOURCE_ROOT) not in sys.path:
     sys.path.insert(0, str(SOURCE_ROOT))
-from lib_mhr.artifacts import artifact_record, atomic_json
+from v2d.common.artifacts import artifact_record, atomic_json
 
 
 @dataclass(frozen=True)

@@ -108,6 +108,9 @@ One call exports one episode. A full submission must collect validated NPZ/GLB
 pairs for **every** required episode in one directory and pass the official full
 sample roster to `eval_reconstruction.py`. The single-episode folder alone is
 not a valid full competition submission.
+The [collection and packing entry point](track1_pack.md) performs these checks,
+copies accepted episode files into the required flat layout, and invokes the
+official packer without submitting to Kaggle.
 
 ## Validation scope
 
