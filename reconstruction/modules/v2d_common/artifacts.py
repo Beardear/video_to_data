@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
+from contextlib import contextmanager
 import hashlib
 import json
 import os
@@ -50,3 +51,21 @@ def atomic_json(path: str | Path, payload: Any) -> None:
 
 def artifact_record(path: str | Path) -> dict[str, Any]:
     return asdict(artifact_identity(path))
+
+
+@contextmanager
+def artifact_lock(path: str | Path):
+    """Hold a nonblocking POSIX writer lock; retain its inode after release."""
+    import fcntl
+
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a") as handle:
+        try:
+            fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as exc:
+            raise RuntimeError(f"Another process is using {path}") from exc
+        try:
+            yield
+        finally:
+            fcntl.flock(handle, fcntl.LOCK_UN)

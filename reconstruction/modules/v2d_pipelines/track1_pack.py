@@ -20,7 +20,7 @@ import tempfile
 from typing import Any
 
 from v2d.common.artifacts import artifact_record, atomic_json
-from v2d.pipelines.track1_preflight import Track1Episode, track1_episodes
+from v2d.pipelines.track1_preflight import Track1Episode, track1_episodes, track1_metadata_identity
 
 
 @dataclass(frozen=True)
@@ -77,6 +77,10 @@ def _accepted_export(root: Path, episode: Track1Episode, commit: str) -> Accepte
     provenance = {name: report[name] for name in (
         "business_commit", "image_build_commit", "image_digest", "export_source_sha256", "settings",
         "inference_settings", "decoder_identity")}
+    inference = provenance["inference_settings"]
+    if inference.get("expected_frames") not in (None, episode.expected_frames):
+        raise ValueError(f"{sequence}: inference frame count disagrees with dataset metadata")
+    provenance["inference_settings"] = {key: value for key, value in inference.items() if key != "expected_frames"}
     for name in ("official_converter", "mhr_model"):
         provenance[f"{name}_sha256"] = report["input_sha256"][name]
     return AcceptedExport(episode.episode_index, paths["npz"], paths["mesh"], paths["report"],
@@ -88,16 +92,6 @@ def _kit_identity(kit: Path) -> dict[str, dict[str, Any]]:
     for folder in (kit / "tools", kit / "v2dlb"):
         files.extend(sorted(folder.rglob("*.py")))
     return {str(path.relative_to(kit)): artifact_record(path) for path in files}
-
-
-def _metadata_identity(dataset: Path) -> dict[str, dict[str, Any]]:
-    info_path = dataset / "meta/info.json"
-    info = json.loads(info_path.read_text())
-    paths = [info_path, dataset / "meta/episodes.jsonl", dataset / "meta/tasks.jsonl",
-             (dataset / info["episodes_metadata"]).resolve()]
-    if any(not path.is_relative_to(dataset) for path in paths):
-        raise ValueError("Metadata paths must stay within the dataset")
-    return {str(path.relative_to(dataset)): artifact_record(path) for path in paths}
 
 
 def pack_track1(dataset_root: str, export_root: str, submission_kit: str, output_dir: str, *,
@@ -113,7 +107,7 @@ def pack_track1(dataset_root: str, export_root: str, submission_kit: str, output
                                        (dataset_root, export_root, submission_kit, output_dir))
     if output.exists():
         raise FileExistsError(f"Use a new packing output_dir: {output}")
-    dataset_identity = _metadata_identity(dataset)
+    dataset_identity = track1_metadata_identity(dataset)
     metadata = {e.episode_index: e for e in track1_episodes(dataset)}
     sample_path = kit / "data/track_1_sample_submission.parquet"
     sample_identity = artifact_record(sample_path)
@@ -168,7 +162,7 @@ def pack_track1(dataset_root: str, export_root: str, submission_kit: str, output
                 or not (table["code_commit_url"] == code_commit_url).all()):
             raise ValueError("Packed output does not exactly match the requested official rows and commit")
         if (artifact_record(sample_path) != sample_identity or _kit_identity(kit) != kit_identity
-                or _metadata_identity(dataset) != dataset_identity):
+                or track1_metadata_identity(dataset) != dataset_identity):
             raise ValueError("Official kit, roster, or dataset metadata changed while packing")
         for episode in accepted:
             for role, path in (("npz", episode.npz), ("mesh", episode.mesh), ("report", episode.report)):

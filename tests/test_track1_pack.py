@@ -61,7 +61,7 @@ def make_inputs(tmp_path, count=2):
             "schema": "v2d.cari4d.track1_export.v1", "sequence": sequence, "frames": int(n),
             "business_commit": COMMIT, "image_build_commit": "b" * 40, "image_digest": "sha256:" + "c" * 64,
             "export_source_sha256": {"fixture": "synthetic export"}, "decoder_identity": {"fixture": True},
-            "inference_settings": {"postopt_num_steps": 300},
+            "inference_settings": {"postopt_num_steps": 300, "expected_frames": int(n)},
             "settings": {"conversion_error_policy": "report", "max_vertex_error_mm": 1.0},
             "input_sha256": {"official_converter": artifact_record(kit / "tools/track1/mesh_to_mhr_params.py")["sha256"],
                              "mhr_model": "d" * 64},

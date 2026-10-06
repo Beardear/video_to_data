@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import fcntl
 from functools import wraps
 import hashlib
 from importlib import metadata
@@ -13,7 +12,7 @@ import platform
 import sys
 from typing import Any, Callable, Mapping
 
-from v2d.common.artifacts import artifact_record, atomic_json
+from v2d.common.artifacts import artifact_lock, artifact_record, atomic_json
 
 
 SOURCE_SUFFIXES = {".py", ".yaml", ".yml", ".json", ".toml", ".txt", ".cpp", ".cu", ".h",
@@ -81,14 +80,7 @@ def episode_run_lock(function: Callable) -> Callable:
         parent.mkdir(parents=True, exist_ok=True)
         # Leave the inode in place: unlinking a lock allows two different inodes
         # to be locked concurrently by waiting/new processes.
-        with (parent / f".{sequence}.lock").open("a") as handle:
-            try:
-                fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            except BlockingIOError as exc:
-                raise RuntimeError(f"Another process is using {parent / sequence}") from exc
-            try:
-                return function(*args, **kwargs)
-            finally:
-                fcntl.flock(handle, fcntl.LOCK_UN)
+        with artifact_lock(parent / f".{sequence}.lock"):
+            return function(*args, **kwargs)
 
     return locked

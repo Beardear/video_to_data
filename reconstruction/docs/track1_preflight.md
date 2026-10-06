@@ -28,7 +28,8 @@ supported; omitted paths are reported as `not_configured`. For example:
       "episode_index": 16,
       "video_path": "outputs/episode_000016/baseline-inputs/episode_000016.0.color.mp4",
       "mask_h5_path": "outputs/episode_000016/baseline-inputs/episode_000016_masks_k0.h5",
-      "object_mesh_path": "outputs/episode_000016/baseline-inputs/sam3d_mesh/object_scaled_50k.glb"
+      "object_mesh_path": "outputs/episode_000016/baseline-inputs/sam3d_mesh/object_scaled_50k.glb",
+      "mesh_scale_report_path": "outputs/episode_000016/baseline-inputs/mesh_scale.json"
     }
   ]
 }
@@ -54,6 +55,10 @@ mesh geometry/scale, weights, GPU readiness, and source/cache identity remain
 unchecked. A zero exit code is not permission to reuse inference outputs or
 evidence of successful reconstruction. Scan the mounted cloud volume separately
 to inspect its inputs; a local inventory describes only local files.
+
+The scale-report path is optional for this file inventory; when provided, its
+presence is checked. The [batch runner](track1_batch.md) requires it and performs
+the content validation below before inference.
 
 ## Prepared-input content validation
 

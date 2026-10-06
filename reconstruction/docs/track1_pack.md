@@ -13,6 +13,9 @@ Keep the official submission kit unpacked from the tracked
 `docs/v2d_challenge/assets/v2d_submission_kit.zip`. Run after episode exports are
 available under a single experiment root:
 
+The [batch runner](track1_batch.md) writes this layout under its `exports/`
+directory and records failures separately.
+
 ```text
 exports/run-001/
   episode_000000/

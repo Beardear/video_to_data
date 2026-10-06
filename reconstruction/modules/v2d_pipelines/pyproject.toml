@@ -27,3 +27,6 @@ packages = ["v2d.pipelines"]
 
 [tool.setuptools.package-dir]
 "v2d.pipelines" = "."
+
+[tool.setuptools.package-data]
+"v2d.pipelines" = ["track1_baseline.json"]

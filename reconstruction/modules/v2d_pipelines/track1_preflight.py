@@ -22,6 +22,7 @@ from typing import Any, Sequence
 INPUT_SCHEMA = "v2d.track1.inputs.v1"
 REPORT_SCHEMA = "v2d.track1.preflight.v1"
 INPUT_ROLES = ("video_path", "mask_h5_path", "object_mesh_path")
+OPTIONAL_INPUT_ROLES = ("mesh_scale_report_path",)
 
 
 @dataclass(frozen=True)
@@ -144,7 +145,7 @@ def track1_episodes(dataset_root: Path) -> tuple[Track1Episode, ...]:
     return tuple(result)
 
 
-def _prepared_inputs(path: Path | None, known: set[int]) -> dict[int, dict[str, Path]]:
+def track1_prepared_inputs(path: Path | None, known: set[int]) -> dict[int, dict[str, Path]]:
     if path is None:
         return {}
     path = path.resolve()
@@ -156,16 +157,28 @@ def _prepared_inputs(path: Path | None, known: set[int]) -> dict[int, dict[str, 
         raise ValueError(f"Inputs refer to unknown episodes: {sorted(set(rows) - known)}")
     result = {}
     for index, row in rows.items():
-        unknown = set(row) - {"episode_index", *INPUT_ROLES}
+        unknown = set(row) - {"episode_index", *INPUT_ROLES, *OPTIONAL_INPUT_ROLES}
         if unknown:
             raise ValueError(f"episode {index}: unknown input fields {sorted(unknown)}")
         paths = {}
-        for role in INPUT_ROLES:
+        for role in (*INPUT_ROLES, *OPTIONAL_INPUT_ROLES):
             value = row.get(role)
             if value is not None:
                 paths[role] = (path.parent / _text(value, role)).resolve()
         result[index] = paths
     return result
+
+
+def track1_metadata_identity(dataset: Path) -> dict[str, dict[str, Any]]:
+    """Hash the metadata used by execution/packing; inventory remains stdlib-only."""
+    from v2d.common.artifacts import artifact_record
+
+    dataset = dataset.resolve()
+    info_path = dataset / "meta/info.json"
+    info = _read_json(info_path)
+    paths = [info_path, dataset / "meta/episodes.jsonl", dataset / "meta/tasks.jsonl",
+             _dataset_path(dataset, _text(info.get("episodes_metadata"), "episodes_metadata"))]
+    return {str(path.relative_to(dataset)): artifact_record(path) for path in paths}
 
 
 def _file_check(path: Path | None) -> InputFileCheck:
@@ -190,7 +203,7 @@ def track1_preflight(
     """Return a file-presence report; never launch inference or create inputs."""
     episodes = track1_episodes(dataset_root)
     known = {episode.episode_index for episode in episodes}
-    prepared = _prepared_inputs(inputs_manifest, known)
+    prepared = track1_prepared_inputs(inputs_manifest, known)
     selected = known if episode_indices is None else {
         _integer(index, "selected episode index") for index in episode_indices}
     if not selected or selected - known:
@@ -203,6 +216,7 @@ def track1_preflight(
         paths = prepared.get(index, {})
         checks = {"source_video": _file_check(episode.source_video)}
         checks.update({role: _file_check(paths.get(role)) for role in INPUT_ROLES})
+        checks.update({role: _file_check(paths[role]) for role in OPTIONAL_INPUT_ROLES if role in paths})
         issues = [f"{role}: {check.status}" for role, check in checks.items()
                   if check.status != "present"]
         video = paths.get("video_path")
