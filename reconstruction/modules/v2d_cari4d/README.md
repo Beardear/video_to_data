@@ -146,6 +146,10 @@ Stage 6 always invokes CoCoNet with the internal `--offline-supervision-contract
 
 ## Validation
 
+For Track 1 submission-format results, see the [episode export adapter](../../docs/track1_export.md).
+It converts the refined human through the official MHR mesh fitter and retains
+the aligned object mesh/pose pair, with explicit conversion-error checks.
+
 ### Full acceptance suite (Docker)
 
 Use this command for SQA acceptance. From `reconstruction/`, with the host packages installed, build the CARI4D image and run the complete suite through the host wrapper:
