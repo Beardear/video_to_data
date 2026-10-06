@@ -72,6 +72,7 @@ def track1_validate_bundle(bundle: Mapping[str, Any], expected_frames: int) -> T
 
 def track1_submission_arrays(
     fitted: Mapping[str, Any], motion: Track1ObjectMotion, *, max_vertex_error_mm: float,
+    conversion_error_policy: str = "reject",
 ) -> dict[str, np.ndarray]:
     """Validate the official fitter's outputs before publishing submission files.
 
@@ -80,12 +81,22 @@ def track1_submission_arrays(
     """
     if not np.isfinite(max_vertex_error_mm) or max_vertex_error_mm <= 0:
         raise ValueError("max_vertex_error_mm must be finite and positive")
+    if conversion_error_policy not in {"reject", "report"}:
+        raise ValueError("conversion_error_policy must be reject or report")
     count = len(motion.rotation)
+    if count <= 0:
+        raise ValueError("Submission must contain at least one frame")
+    poses = np.tile(np.eye(4, dtype=np.float32), (count, 1, 1))
+    poses[:, :3, :3] = _array(motion.rotation, (count, 3, 3), "object_rotation")
+    poses[:, :3, 3] = _array(motion.translation, (count, 3), "object_translation")
+    motion = track1_object_motion(poses, count)
     valid = np.asarray(fitted["valid_input"])
     if valid.shape != (count,) or valid.dtype != np.bool_ or not valid.all():
         raise ValueError("Fitter interpolated or omitted invalid input frames")
     errors = _array(fitted["per_frame_vertex_error_mm"], (count,), "fit errors")
-    if (errors < 0).any() or errors.max() > max_vertex_error_mm:
+    if (errors < 0).any():
+        raise ValueError("Conversion errors must be nonnegative")
+    if conversion_error_policy == "reject" and errors.max() > max_vertex_error_mm:
         raise ValueError(f"Conversion worst-frame mean error {errors.max():.6f} mm "
                          f"exceeds the {max_vertex_error_mm:g} mm limit; inspect the fit")
     return {

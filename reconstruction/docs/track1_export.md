@@ -52,7 +52,7 @@ python -m v2d.cari4d.lib.export_track1 \
   --business_commit "$BUSINESS_COMMIT" \
   --image_build_commit "$IMAGE_BUILD_COMMIT" \
   --image_digest "$IMAGE_DIGEST" \
-  --max_vertex_error_mm 1.0
+  --max_vertex_error_mm 1.0 --conversion_error_policy report
 ```
 
 Set the three version variables to your actual experiment record. On a Docker
@@ -71,10 +71,21 @@ the original eight-stage reconstruction time.
 
 The adapter requires all original frames, consistent source-frame metadata,
 finite parameters, proper object rotations and an unambiguous aligned mesh.
-The default **1 mm limit bounds the worst frame's mean vertex displacement
-introduced by conversion**. This is a configurable engineering tolerance, not
-a competition threshold or a ground-truth accuracy score. Invalid frames may
-not be silently filled by the fitter.
+The **1 mm reference tolerance measures the worst frame's mean vertex
+displacement introduced by conversion**. It is an engineering reference, not a
+competition threshold or a ground-truth accuracy score. Invalid frames may not
+be silently filled by the fitter. Choose an explicit conversion policy:
+
+- `reject` (API/CLI default): do not publish an export above the reference tolerance.
+- `report` (current baseline decision): publish structurally valid outputs and
+  record the measured error, whether the tolerance was exceeded, and which frames
+  exceeded it. This changes acceptance only, not the converter or its parameters.
+
+The baseline invocation above deliberately selects `report`. It keeps the
+existing official fitting algorithm while deferring conversion-precision
+optimization. Both modes reject invalid/omitted frames, malformed dimensions,
+non-finite or negative errors, and invalid object motion. No threshold is an
+estimate of Kaggle score loss, and successful packing is not an accuracy result.
 
 A successful export contains:
 
@@ -85,7 +96,9 @@ episode_000016_export.json
 ```
 
 The JSON includes per-frame fitting errors, decoder identity, source/input/output
-hashes, version records and fitting settings. Inputs changing during conversion
+hashes, version records, fitting settings and an explicit `acceptance` record.
+`accepted_for_packing` refers to this export policy, not user review, repository
+merge approval, or a competition score. Inputs changing during conversion
 cause failure. On failure, the destination is not published; the error names a
 hidden sibling work directory containing intermediate artifacts available so far, such
 as `human_vertices.npy` and `human_fit.npz`. Inspect these before changing the

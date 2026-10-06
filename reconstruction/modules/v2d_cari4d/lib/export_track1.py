@@ -42,6 +42,7 @@ def export_track1(
     image_build_commit: str, image_digest: str, device: str = "cuda",
     decode_batch_size: int = 16, fit_model_batch_size: int = 128,
     fit_precision: str = "float64", max_vertex_error_mm: float = 1.0,
+    conversion_error_policy: str = "reject",
 ) -> Path:
     """Publish a new episode directory only after conversion passes its checks.
 
@@ -62,6 +63,8 @@ def export_track1(
         raise ValueError("fit_precision must be float32 or float64")
     if not np.isfinite(max_vertex_error_mm) or max_vertex_error_mm <= 0:
         raise ValueError("max_vertex_error_mm must be finite and positive")
+    if conversion_error_policy not in {"reject", "report"}:
+        raise ValueError("conversion_error_policy must be reject or report")
     for name, value in (("business_commit", business_commit), ("image_build_commit", image_build_commit)):
         if not re.fullmatch(r"[0-9a-f]{40}", value):
             raise ValueError(f"{name} must be a full 40-character commit SHA")
@@ -118,7 +121,8 @@ def export_track1(
         with np.load(work / "human_fit.npz", allow_pickle=False) as fitted:
             with np.load(work / "object_motion.npz", allow_pickle=False) as motion:
                 arrays = track1_submission_arrays(fitted, Track1ObjectMotion(
-                    motion["rotation"], motion["translation"]), max_vertex_error_mm=max_vertex_error_mm)
+                    motion["rotation"], motion["translation"]), max_vertex_error_mm=max_vertex_error_mm,
+                    conversion_error_policy=conversion_error_policy)
             fit_report = json.loads(str(fitted["report"].item()))
             errors = fitted["per_frame_vertex_error_mm"].copy()
         destination = work / "published"
@@ -135,15 +139,25 @@ def export_track1(
         report = {
             "schema": "v2d.cari4d.track1_export.v1", "sequence": sequence,
             "frames": expected_frames, "business_commit": business_commit,
+            "inference_run_identity": pipeline.get("run_identity"),
             "image_build_commit": image_build_commit, "image_digest": image_digest,
             "input_sha256": input_hashes,
             "export_source_sha256": source_hashes,
             "decoder_identity": json.loads((work / "decoder.json").read_text()),
             "settings": {"device": device, "decode_batch_size": decode_batch_size,
                          "fit_model_batch_size": fit_model_batch_size, "fit_precision": fit_precision,
-                         "max_vertex_error_mm": max_vertex_error_mm},
+                         "max_vertex_error_mm": max_vertex_error_mm,
+                         "conversion_error_policy": conversion_error_policy},
+            "acceptance": {"structural_checks": "PASS", "accepted_for_packing": True,
+                           "conversion_error_policy": conversion_error_policy,
+                           "within_reference_tolerance": bool(np.all(errors <= max_vertex_error_mm)),
+                           "frames_above_reference_tolerance": np.flatnonzero(errors > max_vertex_error_mm).tolist(),
+                           "reference_tolerance_mm": max_vertex_error_mm,
+                           "reference_tolerance_is_competition_rule": False},
             "conversion": {"method": "official_mesh_to_mhr_params", "report": fit_report,
                            "per_frame_mean_vertex_error_mm": errors.tolist(),
+                           "mean_vertex_error_mm": float(errors.mean()),
+                           "worst_frame_mean_vertex_error_mm": float(errors.max()),
                            "identity_policy": "one fitted shape and scale vector per episode"},
             "coordinates": "CARI4D wild camera/world, metres; no extra flip or scaling",
             "object_scale": 1.0, "kaggle_scored": False,
@@ -174,7 +188,9 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--fit_model_batch_size", type=int, default=128)
     parser.add_argument("--fit_precision", choices=("float32", "float64"), default="float64")
     parser.add_argument("--max_vertex_error_mm", type=float, default=1.0,
-                        help="Maximum per-frame mean displacement caused by MHR fitting, in mm")
+                        help="Reference tolerance for per-frame mean conversion displacement, in mm")
+    parser.add_argument("--conversion_error_policy", choices=("reject", "report"), default="reject",
+                        help="Reject above the reference tolerance, or publish with the measured errors recorded")
     return parser
 
 

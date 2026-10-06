@@ -179,6 +179,58 @@ def test_excessive_fit_error_keeps_diagnostics_without_publishing(export_inputs,
     assert len(list(destination.parent.glob(".export-*/human_fit.npz"))) == 1
 
 
+def test_report_policy_publishes_with_explicit_error_acceptance(export_inputs, monkeypatch):
+    def lossy_fit(command, **kwargs):
+        simulate_children(command, **kwargs)
+        if command[1].endswith("mesh_to_mhr_params.py"):
+            output = Path(command[command.index("--output") + 1])
+            fit = fitted()
+            fit["per_frame_vertex_error_mm"][:] = [0.4, 2.36, 0.5]
+            np.savez(output, **fit)
+    monkeypatch.setattr(adapter.subprocess, "run", lossy_fit)
+    out = adapter.export_track1(**export_inputs, conversion_error_policy="report")
+    report = json.loads((out / "episode_000016_export.json").read_text())
+    acceptance = report["acceptance"]
+    assert acceptance["accepted_for_packing"] is True
+    assert acceptance["conversion_error_policy"] == "report"
+    assert acceptance["frames_above_reference_tolerance"] == [1]
+    assert acceptance["within_reference_tolerance"] is False
+    assert acceptance["reference_tolerance_is_competition_rule"] is False
+    assert report["conversion"]["worst_frame_mean_vertex_error_mm"] == pytest.approx(2.36)
+    assert report["kaggle_scored"] is False
+
+
+@pytest.mark.parametrize("change,match", [
+    (lambda f: f["valid_input"].__setitem__(1, False), "invalid input frames"),
+    (lambda f: f["per_frame_vertex_error_mm"].__setitem__(1, np.nan), "finite"),
+    (lambda f: f["per_frame_vertex_error_mm"].__setitem__(1, -1), "nonnegative"),
+    (lambda f: f["pose"].__setitem__((1, 0), np.inf), "finite"),
+    (lambda f: f.update(shape=np.zeros((3, 45))), "shape must"),
+])
+def test_report_policy_does_not_relax_structural_checks(change, match):
+    fit = fitted()
+    change(fit)
+    with pytest.raises(ValueError, match=match):
+        track1_submission_arrays(fit, track1_validate_bundle(bundle(), 3),
+                                 max_vertex_error_mm=1, conversion_error_policy="report")
+
+
+def test_report_policy_revalidates_object_motion():
+    motion = track1_validate_bundle(bundle(), 3)
+    motion.rotation[1, 0, 0] = -1
+    with pytest.raises(ValueError, match="proper"):
+        track1_submission_arrays(fitted(), motion, max_vertex_error_mm=1,
+                                 conversion_error_policy="report")
+
+
+def test_unknown_policy_fails_before_running_models(export_inputs, monkeypatch):
+    def unexpected(*args, **kwargs):
+        pytest.fail("Must validate policy before running models")
+    monkeypatch.setattr(adapter.subprocess, "run", unexpected)
+    with pytest.raises(ValueError, match="conversion_error_policy"):
+        adapter.export_track1(**export_inputs, conversion_error_policy="ignore_everything")
+
+
 def test_changed_source_during_export_is_rejected(export_inputs, monkeypatch):
     def mutate(command, **kwargs):
         simulate_children(command, **kwargs)
