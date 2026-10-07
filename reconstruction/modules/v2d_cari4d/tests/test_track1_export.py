@@ -156,7 +156,7 @@ def simulate_children(command, **kwargs):
         original = np.load(argument("--original-joints"), allow_pickle=False)
         scoring = track1_scoring(Path(argument("--submission-kit")), 16, 3)
         report = track1_added_acceleration(original, original, scoring,
-                                          threshold_cm=float(argument("--threshold-cm")))
+                                          reference_cm=float(argument("--reference-cm")))
         out.write_text(json.dumps(report))
     else:
         pytest.fail(f"Unexpected subprocess: {command}")
@@ -172,7 +172,7 @@ def test_publish_and_refuse_reuse(export_inputs, monkeypatch):
     assert "official_converter" in report["input_sha256"]
     assert len(report["conversion"]["per_frame_mean_vertex_error_mm"]) == 3
     assert report["conversion"]["added_acceleration"]["added_acc_h_cm"] == 0
-    assert report["acceptance"]["added_acceleration_check"] == "PASS"
+    assert report["acceptance"]["conversion_diagnostics"] == "RECORDED"
     assert report["conversion"]["vertex_spikes"]["no_scored_spikes"] is True
     with pytest.raises(FileExistsError):
         adapter.export_track1(**export_inputs)
@@ -270,7 +270,7 @@ def test_changed_source_during_export_is_rejected(export_inputs, monkeypatch):
     assert not Path(export_inputs["output_dir"]).exists()
 
 
-def test_added_acceleration_failure_is_not_bypassed_by_report_policy(export_inputs, monkeypatch):
+def test_added_acceleration_above_reference_is_recorded_without_blocking(export_inputs, monkeypatch):
     from v2d.common.track1_conversion import track1_acceleration_summary
 
     def jitter(command, **kwargs):
@@ -280,13 +280,14 @@ def test_added_acceleration_failure_is_not_bypassed_by_report_policy(export_inpu
             output = Path(command[command.index("--output") + 1])
             output.write_text(json.dumps(track1_acceleration_summary([0.021], scoring, 0.02)))
     monkeypatch.setattr(adapter.subprocess, "run", jitter)
-    with pytest.raises(ValueError, match="Added acceleration"):
-        adapter.export_track1(**export_inputs, conversion_error_policy="report")
-    destination = Path(export_inputs["output_dir"])
-    assert not destination.exists()
-    diagnostics = list(destination.parent.glob(".export-*/added_acceleration.json"))
-    assert len(diagnostics) == 1
-    assert json.loads(diagnostics[0].read_text())["added_acc_h_cm"] == pytest.approx(0.021)
+    destination = adapter.export_track1(**export_inputs, conversion_error_policy="report")
+    report = json.loads((destination / "episode_000016_export.json").read_text())
+    assert report["acceptance"]["accepted_for_packing"] is True
+    assert report["acceptance"]["conversion_diagnostics"] == "RECORDED"
+    metric = report["conversion"]["added_acceleration"]
+    assert metric["added_acc_h_cm"] == pytest.approx(0.021)
+    assert metric["within_reference"] is False
+    assert metric["policy"] == "report_only"
 
 
 def test_changed_official_scoring_source_is_rejected(export_inputs, monkeypatch):

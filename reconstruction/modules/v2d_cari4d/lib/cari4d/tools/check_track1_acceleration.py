@@ -21,7 +21,7 @@ def main() -> None:
     parser.add_argument("--expected-frames", type=int, required=True)
     parser.add_argument("--batch-size", type=int, required=True)
     parser.add_argument("--precision", choices=("float32", "float64"), required=True)
-    parser.add_argument("--threshold-cm", type=float, required=True)
+    parser.add_argument("--reference-cm", type=float, required=True)
     args = parser.parse_args()
     if args.batch_size <= 0:
         raise ValueError("batch-size must be positive")
@@ -45,8 +45,8 @@ def main() -> None:
         converted[start:stop] = joints.cpu().numpy()
     np.save(output.with_suffix(".joints.npy"), converted)
     report = track1_added_acceleration(np.load(args.original_joints, allow_pickle=False), converted,
-                                      scoring, threshold_cm=args.threshold_cm)
-    # Write FAIL measurements too; the parent retains diagnostics and gates publication.
+                                      scoring, reference_cm=args.reference_cm)
+    # Values above the reference are diagnostics, not publication failures.
     atomic_json(output, report)
 
 

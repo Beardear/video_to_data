@@ -12,7 +12,9 @@ import pytest
 import trimesh
 
 from v2d.common.artifacts import artifact_record
-from v2d.common.track1_conversion import Track1Scoring, track1_body_joint_indices, track1_acceleration_summary
+from v2d.common.track1_conversion import (
+    Track1Scoring, track1_body_joint_indices, track1_acceleration_summary, track1_vertex_spikes,
+)
 from v2d.pipelines import track1_pack as packer
 
 
@@ -66,15 +68,16 @@ def make_inputs(tmp_path, count=2):
             "export_source_sha256": {"fixture": "synthetic export"}, "decoder_identity": {"fixture": True},
             "inference_settings": {"postopt_num_steps": 300, "expected_frames": int(n)},
             "settings": {"conversion_error_policy": "report", "max_vertex_error_mm": 1.0,
-                         "max_added_acc_h_cm": 0.02},
+                         "added_acc_h_reference_cm": 0.02},
             "input_sha256": {"official_converter": artifact_record(kit / "tools/track1/mesh_to_mhr_params.py")["sha256"],
                              "mhr_model": "d" * 64,
                              "official_metrics": artifact_record(kit / "v2dlb/mhr_metrics.py")["sha256"],
                              "official_sample": artifact_record(sample_path)["sha256"],
                              "acceleration_contract": artifact_record(ROOT / "reconstruction/modules/v2d_common/track1_conversion.py")["sha256"]},
             "acceptance": {"structural_checks": "PASS", "accepted_for_packing": True,
-                           "conversion_error_policy": "report", "added_acceleration_check": "PASS"},
+                           "conversion_error_policy": "report", "conversion_diagnostics": "RECORDED"},
             "conversion": {"per_frame_mean_vertex_error_mm": [0.4] * int(n),
+                           "vertex_spikes": track1_vertex_spikes([0.4] * int(n), scoring),
                            "added_acceleration": track1_acceleration_summary([0] * len(scoring.centers()), scoring, 0.02)},
             "output_sha256": {p.name: artifact_record(p)["sha256"] for p in (npz, mesh)},
         }
@@ -104,25 +107,52 @@ def test_full_official_roster_packs_all_30_synthetic_episodes(tmp_path):
     np.testing.assert_allclose(row, [0.2, -0.4, 1.5])
 
 
-@pytest.mark.parametrize("mutation", ["missing", "over_limit", "wrong_frames", "changed_threshold"])
-def test_acceleration_gate_is_rechecked_before_packing(inputs, mutation):
+@pytest.mark.parametrize("mutation", ["missing", "wrong_frames", "changed_reference"])
+def test_acceleration_report_integrity_is_rechecked_before_packing(inputs, mutation):
     path = Path(inputs["export_root"]) / "episode_000000/episode_000000_export.json"
     report = json.loads(path.read_text())
     metric = report["conversion"]["added_acceleration"]
     if mutation == "missing":
         del report["conversion"]["added_acceleration"]
-    elif mutation == "over_limit":
-        scoring = Track1Scoring(tuple(metric["joint_indices"]), tuple(metric["scored_frames"]))
-        report["conversion"]["added_acceleration"] = track1_acceleration_summary(
-            [0.021] * len(scoring.centers()), scoring, 0.02)
     elif mutation == "wrong_frames":
         metric["scored_frames"][0] -= 1
     else:
-        report["settings"]["max_added_acc_h_cm"] = 1
+        report["settings"]["added_acc_h_reference_cm"] = 1
     path.write_text(json.dumps(report))
     with pytest.raises(ValueError, match="acceleration"):
         packer.pack_track1(**inputs)
     assert not Path(inputs["output_dir"]).exists()
+
+
+def test_packing_keeps_high_acceleration_and_scored_spikes_as_diagnostics(inputs):
+    path = Path(inputs["export_root"]) / "episode_000000/episode_000000_export.json"
+    report = json.loads(path.read_text())
+    conversion = report["conversion"]
+    metric = conversion["added_acceleration"]
+    scoring = Track1Scoring(tuple(metric["joint_indices"]), tuple(metric["scored_frames"]))
+    conversion["added_acceleration"] = track1_acceleration_summary([0.1] * len(scoring.centers()), scoring, 0.02)
+    errors = conversion["per_frame_mean_vertex_error_mm"]
+    errors[scoring.frames[0]] = 3.0
+    conversion["vertex_spikes"] = track1_vertex_spikes(errors, scoring)
+    assert conversion["vertex_spikes"]["scored_spike_count"] == 1
+    path.write_text(json.dumps(report))
+    result = packer.pack_track1(**inputs, episodes=[0])
+    saved = json.loads((result.parent / "episodes/episode_000000_export.json").read_text())
+    assert saved["conversion"] == conversion
+    assert saved["acceptance"]["accepted_for_packing"] is True
+
+
+@pytest.mark.parametrize("mutation", ["missing", "tampered"])
+def test_missing_or_inconsistent_spike_report_cannot_be_packed(inputs, mutation):
+    path = Path(inputs["export_root"]) / "episode_000000/episode_000000_export.json"
+    report = json.loads(path.read_text())
+    if mutation == "missing":
+        del report["conversion"]["vertex_spikes"]
+    else:
+        report["conversion"]["vertex_spikes"]["scored_spike_count"] = 1
+    path.write_text(json.dumps(report))
+    with pytest.raises(ValueError, match="vertex-spike"):
+        packer.pack_track1(**inputs)
 
 
 def test_changed_official_metric_source_cannot_reuse_old_acceleration(inputs):

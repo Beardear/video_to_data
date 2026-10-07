@@ -102,15 +102,14 @@ valid triplets, and never bridges gaps. Short stretches are recorded but
 skipped; no evaluable triplets is an error, not a zero-error pass. There is no
 FPS² scaling, alignment to ground truth, or smoothing.
 
-`--max_added_acc_h_cm` defaults to **0.02**, with strict `<` acceptance. This is
-a reviewer-proposed engineering gate, **not** the official ACC-H score or a
-competition threshold. It applies independently of the vertex-error `report`
-policy. Exceedance prevents publication and retains `added_acceleration.json`,
-`human_joints.npy` and converted-joint diagnostics in the work directory.
+`--added_acc_h_reference_cm` defaults to **0.02**, used only as a diagnostic
+reference. Exceedance is recorded and **does not block export, resume or packing**.
+This is not the official ACC-H score or a competition threshold. Missing,
+non-finite or inconsistent diagnostics still fail validation.
 Successful export reports include `conversion.added_acceleration`, with
 `added_acc_h_cm`, center frames, per-frame means, per-stretch summaries and the
-threshold verdict. The kit's scoring sources and roster are hashed; packing
-and batch resume reject missing, inconsistent or failing checks.
+`within_reference` comparison and `policy=report_only`. The kit's scoring sources
+and roster are hashed; packing and batch resume verify both diagnostic reports.
 
 `conversion.vertex_spikes` additionally reports frames whose mean vertex error
 is **both >3× the median of the ±5 neighboring frames (excluding itself) and

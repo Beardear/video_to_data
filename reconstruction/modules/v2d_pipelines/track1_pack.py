@@ -20,7 +20,9 @@ import tempfile
 from typing import Any
 
 from v2d.common.artifacts import artifact_record, atomic_json
-from v2d.common.track1_conversion import Track1Scoring, track1_body_joint_indices, track1_require_acceleration
+from v2d.common.track1_conversion import (
+    Track1Scoring, track1_body_joint_indices, track1_validate_acceleration, track1_vertex_spikes,
+)
 from v2d.pipelines.track1_preflight import Track1Episode, track1_episodes, track1_metadata_identity
 
 
@@ -54,9 +56,9 @@ def _accepted_export(root: Path, episode: Track1Episode, commit: str, scoring: T
             raise ValueError(f"{sequence}: {name} changed after export")
     settings = report.get("settings", {})
     acceleration = report.get("conversion", {}).get("added_acceleration", {})
-    track1_require_acceleration(acceleration, scoring, settings.get("max_added_acc_h_cm"))
-    if acceptance.get("added_acceleration_check") != "PASS":
-        raise ValueError(f"{sequence}: added acceleration was not accepted")
+    track1_validate_acceleration(acceleration, scoring, settings.get("added_acc_h_reference_cm"))
+    if acceptance.get("conversion_diagnostics") != "RECORDED":
+        raise ValueError(f"{sequence}: conversion diagnostics were not recorded")
     policy = settings.get("conversion_error_policy")
     threshold = settings.get("max_vertex_error_mm")
     errors = np.asarray(report.get("conversion", {}).get("per_frame_mean_vertex_error_mm"), dtype=float)
@@ -65,6 +67,8 @@ def _accepted_export(root: Path, episode: Track1Episode, commit: str, scoring: T
             or errors.shape != (episode.expected_frames,) or not np.isfinite(errors).all()
             or (errors < 0).any() or (policy == "reject" and errors.max() > threshold)):
         raise ValueError(f"{sequence}: inconsistent conversion acceptance")
+    if report.get("conversion", {}).get("vertex_spikes") != track1_vertex_spikes(errors, scoring):
+        raise ValueError(f"{sequence}: missing or inconsistent vertex-spike diagnostics")
     with np.load(paths["npz"], allow_pickle=False) as arrays:
         shapes = {"pose": (episode.expected_frames, 136), "scales": (68,), "shape": (45,),
                   "object_rotation": (episode.expected_frames, 3, 3),

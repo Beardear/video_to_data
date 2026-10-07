@@ -7,7 +7,7 @@
   },
   "export": {
     "conversion_error_policy": "report",
-    "max_added_acc_h_cm": 0.02,
+    "added_acc_h_reference_cm": 0.02,
     "max_vertex_error_mm": 1.0,
     "decode_batch_size": 16,
     "fit_model_batch_size": 128,

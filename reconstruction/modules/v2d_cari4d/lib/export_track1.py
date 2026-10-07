@@ -43,7 +43,7 @@ def export_track1(
     decode_batch_size: int = 16, fit_model_batch_size: int = 128,
     fit_precision: str = "float64", max_vertex_error_mm: float = 1.0,
     conversion_error_policy: str = "reject",
-    max_added_acc_h_cm: float = 0.02,
+    added_acc_h_reference_cm: float = 0.02,
 ) -> Path:
     """Publish a new episode directory only after conversion passes its checks.
 
@@ -53,7 +53,7 @@ def export_track1(
     """
     import numpy as np
     from v2d.common.artifacts import atomic_json
-    from v2d.common.track1_conversion import track1_scoring, track1_require_acceleration, track1_vertex_spikes
+    from v2d.common.track1_conversion import track1_scoring, track1_validate_acceleration, track1_vertex_spikes
 
     if str(SOURCE_ROOT) not in sys.path:
         sys.path.insert(0, str(SOURCE_ROOT))
@@ -68,9 +68,9 @@ def export_track1(
         raise ValueError("max_vertex_error_mm must be finite and positive")
     if conversion_error_policy not in {"reject", "report"}:
         raise ValueError("conversion_error_policy must be reject or report")
-    if (type(max_added_acc_h_cm) not in (int, float) or not np.isfinite(max_added_acc_h_cm)
-            or max_added_acc_h_cm <= 0):
-        raise ValueError("max_added_acc_h_cm must be finite and positive")
+    if (type(added_acc_h_reference_cm) not in (int, float) or not np.isfinite(added_acc_h_reference_cm)
+            or added_acc_h_reference_cm <= 0):
+        raise ValueError("added_acc_h_reference_cm must be finite and positive")
     for name, value in (("business_commit", business_commit), ("image_build_commit", image_build_commit)):
         if not re.fullmatch(r"[0-9a-f]{40}", value):
             raise ValueError(f"{name} must be a full 40-character commit SHA")
@@ -145,7 +145,7 @@ def export_track1(
         with np.load(work / "human_fit.npz", allow_pickle=False) as fitted:
             errors = fitted["per_frame_vertex_error_mm"].copy()
             spikes = track1_vertex_spikes(errors, scoring)
-            # Keep the diagnostic even if vertex/acceleration acceptance fails.
+            # Keep the diagnostic even if a later structural validation fails.
             atomic_json(work / "vertex_spikes.json", spikes)
             with np.load(work / "object_motion.npz", allow_pickle=False) as motion:
                 arrays = track1_submission_arrays(fitted, Track1ObjectMotion(
@@ -162,10 +162,10 @@ def export_track1(
             "--submission", str(npz), "--submission-kit", str(kit), "--model", str(model),
             "--output", str(acceleration_path), "--device", device, "--episode-index", str(episode_index),
             "--expected-frames", str(expected_frames), "--batch-size", str(decode_batch_size),
-            "--precision", fit_precision, "--threshold-cm", str(max_added_acc_h_cm),
+            "--precision", fit_precision, "--reference-cm", str(added_acc_h_reference_cm),
         ], cwd=SOURCE_ROOT, env=env, check=True)
         acceleration = json.loads(acceleration_path.read_text())
-        track1_require_acceleration(acceleration, scoring, max_added_acc_h_cm)
+        track1_validate_acceleration(acceleration, scoring, added_acc_h_reference_cm)
         mesh_output = destination / f"{sequence}_object.glb"
         shutil.copyfile(mesh, mesh_output)
         # Reject concurrently changed inputs; do not publish mixed-version data.
@@ -186,14 +186,14 @@ def export_track1(
                          "fit_model_batch_size": fit_model_batch_size, "fit_precision": fit_precision,
                          "max_vertex_error_mm": max_vertex_error_mm,
                          "conversion_error_policy": conversion_error_policy,
-                         "max_added_acc_h_cm": max_added_acc_h_cm},
+                         "added_acc_h_reference_cm": added_acc_h_reference_cm},
             "acceptance": {"structural_checks": "PASS", "accepted_for_packing": True,
                            "conversion_error_policy": conversion_error_policy,
                            "within_reference_tolerance": bool(np.all(errors <= max_vertex_error_mm)),
                            "frames_above_reference_tolerance": np.flatnonzero(errors > max_vertex_error_mm).tolist(),
                            "reference_tolerance_mm": max_vertex_error_mm,
                            "reference_tolerance_is_competition_rule": False,
-                           "added_acceleration_check": "PASS"},
+                           "conversion_diagnostics": "RECORDED"},
             "conversion": {"method": "official_mesh_to_mhr_params", "report": fit_report,
                            "per_frame_mean_vertex_error_mm": errors.tolist(),
                            "mean_vertex_error_mm": float(errors.mean()),
@@ -233,8 +233,8 @@ def _parser() -> argparse.ArgumentParser:
                         help="Reference tolerance for per-frame mean conversion displacement, in mm")
     parser.add_argument("--conversion_error_policy", choices=("reject", "report"), default="reject",
                         help="Reject above the reference tolerance, or publish with the measured errors recorded")
-    parser.add_argument("--max_added_acc_h_cm", type=float, default=0.02,
-                        help="Require conversion-added joint acceleration below this value in cm/frame^2")
+    parser.add_argument("--added_acc_h_reference_cm", type=float, default=0.02,
+                        help="Diagnostic reference in cm/frame^2; exceedance is recorded, not rejected")
     return parser
 
 

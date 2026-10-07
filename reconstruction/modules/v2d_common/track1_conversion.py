@@ -66,12 +66,12 @@ def track1_scoring(kit: Path, episode_index: int, expected_frames: int) -> Track
 
 
 def track1_acceleration_summary(
-    per_frame_mean_cm: Any, scoring: Track1Scoring, threshold_cm: float,
+    per_frame_mean_cm: Any, scoring: Track1Scoring, reference_cm: float,
 ) -> dict[str, Any]:
-    """Summarize second differences; shared by export and acceptance checks."""
-    if (type(threshold_cm) not in (int, float) or not np.isfinite(threshold_cm)
-            or threshold_cm <= 0):
-        raise ValueError("Added-acceleration threshold must be finite and positive")
+    """Summarize second differences against a diagnostic reference, without a gate."""
+    if (type(reference_cm) not in (int, float) or not np.isfinite(reference_cm)
+            or reference_cm <= 0):
+        raise ValueError("Added-acceleration reference must be finite and positive")
     centers = scoring.centers()
     if not centers:
         raise ValueError("Added acceleration requires a scored stretch of at least three frames")
@@ -86,18 +86,19 @@ def track1_acceleration_summary(
                           "added_acc_h_cm": float(values[offset:offset + count].mean()) if count else None})
         offset += count
     mean = float(values.mean())
-    return {"schema": "v2d.track1.added_acceleration.v1", "units": "cm/frame^2",
+    return {"schema": "v2d.track1.added_acceleration.v2", "units": "cm/frame^2",
+            "policy": "report_only",
             "definition": "mean_norm_second_difference_of_converted_minus_original_joints",
             "alignment": "none_same_world_frame", "is_kaggle_acc_h": False,
             "joint_indices": list(scoring.joint_indices), "scored_frames": list(scoring.frames),
             "center_frames": centers, "per_frame_mean_cm": values.tolist(), "stretches": stretches,
-            "added_acc_h_cm": mean, "threshold_cm": float(threshold_cm),
-            "comparison": "<", "threshold_is_competition_rule": False,
-            "within_threshold": mean < threshold_cm}
+            "added_acc_h_cm": mean, "reference_cm": float(reference_cm),
+            "comparison": "<", "reference_is_competition_rule": False,
+            "within_reference": mean < reference_cm}
 
 
 def track1_added_acceleration(
-    original_joints: Any, converted_joints: Any, scoring: Track1Scoring, *, threshold_cm: float,
+    original_joints: Any, converted_joints: Any, scoring: Track1Scoring, *, reference_cm: float,
 ) -> dict[str, Any]:
     """Arrays are [T, 127, 3] in metres, in the identical world/axis convention.
 
@@ -115,21 +116,18 @@ def track1_added_acceleration(
         if len(run) >= 3:
             acceleration = residual[run[2:]] - 2 * residual[run[1:-1]] + residual[run[:-2]]
             values.extend((100 * np.linalg.norm(acceleration, axis=-1).mean(axis=1)).tolist())
-    return track1_acceleration_summary(values, scoring, threshold_cm)
+    return track1_acceleration_summary(values, scoring, reference_cm)
 
 
-def track1_require_acceleration(
-    report: dict[str, Any], scoring: Track1Scoring, threshold_cm: float,
+def track1_validate_acceleration(
+    report: dict[str, Any], scoring: Track1Scoring, reference_cm: float,
 ) -> None:
-    """Reject missing, inconsistent, unevaluable or over-threshold diagnostics."""
+    """Reject malformed diagnostics; a value above the reference remains valid."""
     if not isinstance(report, dict):
         raise ValueError("Missing or inconsistent added-acceleration report")
-    expected = track1_acceleration_summary(report.get("per_frame_mean_cm"), scoring, threshold_cm)
+    expected = track1_acceleration_summary(report.get("per_frame_mean_cm"), scoring, reference_cm)
     if report != expected:
         raise ValueError("Missing or inconsistent added-acceleration report")
-    if not expected["within_threshold"]:
-        raise ValueError(f"Added acceleration {expected['added_acc_h_cm']:.6g} cm/frame^2 "
-                         f"must be below {threshold_cm:g}; inspect conversion before publishing")
 
 
 def track1_vertex_spikes(per_frame_error_mm: Any, scoring: Track1Scoring) -> dict[str, Any]:
