@@ -1,0 +1,26 @@
+{
+  "prompts": [
+    {
+      "frame_index": 0,
+      "object_id": 0,
+      "role": "human",
+      "box": {
+        "x0": 458,
+        "y0": 426,
+        "x1": 605,
+        "y1": 899
+      }
+    },
+    {
+      "frame_index": 0,
+      "object_id": 1,
+      "role": "object",
+      "box": {
+        "x0": 653,
+        "y0": 659,
+        "x1": 752,
+        "y1": 733
+      }
+    }
+  ]
+}

@@ -64,6 +64,10 @@ def run_in_container(
             dir_to_mount[host_dir] = f"/data/{arg_name}"
 
     cmd = ["docker", "run", "--rm"]
+    # Orchestrators may assign a unique name so cancellation can remove only
+    # the container they started, even if the attached Docker client exits.
+    if os.environ.get("V2D_DOCKER_CONTAINER_NAME"):
+        cmd += ["--name", os.environ["V2D_DOCKER_CONTAINER_NAME"]]
     if gpus:
         cmd += ["--runtime=nvidia", "--gpus", "all"]
     cmd += [

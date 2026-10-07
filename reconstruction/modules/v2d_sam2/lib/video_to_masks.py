@@ -129,6 +129,8 @@ if __name__ == "__main__":
     parser.add_argument("--prompts_path", type=str, required=True, help="Path to prompts JSON file")
     parser.add_argument("--masks_dir", type=str, required=True, help="Output directory for masks")
     parser.add_argument("--weights_dir", type=str, required=True, help="Path to SAM2 weights directory")
+    parser.add_argument("--mask_extension", default="", help="Output stream suffix; .h5 stores each object in one file")
 
     args = parser.parse_args()
-    video_to_masks(args.video_path, args.prompts_path, args.masks_dir, args.weights_dir)
+    video_to_masks(args.video_path, args.prompts_path, args.masks_dir, args.weights_dir,
+                   mask_extension=args.mask_extension)

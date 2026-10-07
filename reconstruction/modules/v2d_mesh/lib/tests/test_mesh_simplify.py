@@ -61,3 +61,11 @@ def test_simplify_does_not_mutate_input(sphere_mesh):
     original_face_count = len(sphere_mesh.faces)
     mesh_simplify(sphere_mesh, factor=0.1)
     assert len(sphere_mesh.faces) == original_face_count
+
+
+@pytest.mark.parametrize("settings", [{"face_count": 50000}, {"face_count": 12}, {"factor": 1.0}])
+def test_simplify_keeps_small_mesh_geometry_and_colors_exact(colored_box_mesh, settings):
+    result = mesh_simplify(colored_box_mesh, **settings)
+    np.testing.assert_array_equal(result.vertices, colored_box_mesh.vertices)
+    np.testing.assert_array_equal(result.faces, colored_box_mesh.faces)
+    np.testing.assert_array_equal(result.vertex_colors, colored_box_mesh.vertex_colors)

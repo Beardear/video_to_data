@@ -10,6 +10,7 @@ version = "0.1.0"
 description = "Example pipelines composing v2d Docker modules"
 requires-python = ">=3.10"
 dependencies = [
+    "v2d-common",
     "numpy",
     "opencv-python",
     "trimesh",
@@ -18,8 +19,14 @@ dependencies = [
 ]
 # Other runtime dependencies are local packages installed via scripts/install_packages.sh
 
+[project.optional-dependencies]
+track1 = ["pandas", "pyarrow", "fast_simplification", "v2d-common[io]"]
+
 [tool.setuptools]
 packages = ["v2d.pipelines"]
 
 [tool.setuptools.package-dir]
 "v2d.pipelines" = "."
+
+[tool.setuptools.package-data]
+"v2d.pipelines" = ["track1_baseline.json"]

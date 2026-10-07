@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib.util
 import json
 import os
 import subprocess
@@ -20,19 +21,31 @@ from v2d.cari4d.lib.download_weights import CARI4D_CHECKPOINT_RELATIVE_PATH, CAR
 SOURCE_ROOT = Path(__file__).resolve().parent / "cari4d"
 SAM3D_SOURCE_ROOT = Path("/workspace/v2d_sam3d_body/lib")
 PIPELINE_SCHEMA = "v2d.cari4d.wild_inference.v1"
+if str(SOURCE_ROOT) not in sys.path:
+    sys.path.insert(0, str(SOURCE_ROOT))
+from v2d.common.artifacts import artifact_record, atomic_json
+from lib_mhr.run_cache import bind_run, episode_run_lock, run_identity
 
 
 def _file_identity(path: str | Path) -> dict[str, Any]:
-    path = Path(path).resolve()
-    stat = path.stat()
-    return {"path": str(path), "size": int(stat.st_size), "mtime_ns": int(stat.st_mtime_ns)}
+    return artifact_record(path)
 
 
 def _atomic_json(path: Path, payload: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_name(f".{path.name}.{os.getpid()}.tmp")
-    temporary.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
-    os.replace(temporary, path)
+    atomic_json(path, payload)
+
+
+def _runtime_source_roots(weights_path: Path) -> dict[str, Path]:
+    roots = {"cari4d": SOURCE_ROOT.parent, "sam3d_body": SAM3D_SOURCE_ROOT,
+             "foundationpose": Path("/workspace/v2d_foundation_pose/lib"),
+             "torch_hub": weights_path / "sam3d_body/torch_home/hub",
+             "sam3d_assets": weights_path / "sam3d_body/checkpoints/sam-3d-body-dinov3"}
+    for name in ("moge", "utils3d", "v2d.common", "v2d.mv"):
+        spec = importlib.util.find_spec(name)
+        if spec is None or not spec.submodule_search_locations:
+            raise ImportError(f"Cannot identify runtime source for {name}")
+        roots[name] = Path(next(iter(spec.submodule_search_locations)))
+    return roots
 
 
 def _signature(command: Sequence[str], inputs: Sequence[Path]) -> dict[str, Any]:
@@ -52,7 +65,9 @@ def _output_identities(outputs: Sequence[Path]) -> list[dict[str, Any]]:
 
 def _stage_run(name: str, command: list[str], inputs: Sequence[Path], outputs: Sequence[Path], marker_root: Path, env: dict[str, str], overwrite: bool) -> dict[str, Any]:
     marker = marker_root / f"{name}.json"
-    signature = _signature([value for value in command if value not in ("--overwrite", "--redo", "--redo-sam3d-cache")], inputs)
+    inputs = [*inputs, marker_root.parent / "run_identity.json"]
+    signature_command = [value for value in command if value not in ("--overwrite", "--redo", "--redo-sam3d-cache")]
+    signature = _signature(signature_command, inputs)
     if marker.is_file() and not overwrite:
         existing = json.loads(marker.read_text())
         outputs_available = all(path.is_file() and path.stat().st_size > 0 for path in outputs)
@@ -65,8 +80,10 @@ def _stage_run(name: str, command: list[str], inputs: Sequence[Path], outputs: S
     print(f"CARI4D_STAGE_STARTED {name}", flush=True)
     subprocess.run(command, cwd=SOURCE_ROOT, env=env, check=True)
     elapsed_seconds = time.perf_counter() - started
+    if _signature(signature_command, inputs) != signature:
+        raise ValueError(f"Inputs changed while running stage {name}; use a new output_dir")
     output_identities = _output_identities(outputs)
-    _atomic_json(marker, {"schema": "v2d.cari4d.stage.v1", "name": name, "signature": signature, "outputs": output_identities})
+    _atomic_json(marker, {"schema": "v2d.cari4d.stage.v2", "name": name, "signature": signature, "outputs": output_identities})
     print(f"CARI4D_STAGE_COMPLETED {name} elapsed_seconds={elapsed_seconds:.3f}", flush=True)
     return {"name": name, "reused": False, "elapsed_seconds": elapsed_seconds, "outputs": output_identities}
 
@@ -87,7 +104,10 @@ def _flag(command: list[str], enabled: bool, value: str) -> None:
         command.append(value)
 
 
+@episode_run_lock
 def run_inference(video_path: str, mask_h5_path: str, object_mesh_path: str, weights_path: str, output_dir: str, *, download_models: bool = True, expected_frames: int | None = None, device: str = "cuda", moge_devices: str | None = None, moge_batch_size: int = 8, sam3d_chunk_size: int = 16, sam3d_alignment_workers: int = 1, sam3d_refit_batch_size: int = 512, depth_alignment_render_batch_size: int = 4, depth_alignment_encoding_workers: int = 16, depth_alignment_write_batch_size: int = 64, foundationpose_iteration: int = 5, foundationpose_max_attempts: int = 5, coconet_stride: int = 96, coconet_render_batch_size: int = 32, coconet_crop_workers: int = 8, coconet_crop_buffer_count: int = 2, postopt_num_steps: int = 300, postopt_batch_size: int = 0, postopt_temporal_weight: float = 100.0, postopt_human_pose_prior_weight: float = 200.0, postopt_contact_activation_distance_m: float = 0.05, postopt_report_every: int = 10, postopt_diagnostics_every: int = 500, symmetric_object: bool = False, optimize_object_rotation: bool = False, render_batch_size: int = 4, overwrite: bool = False) -> Path:
+    settings = {key: value for key, value in locals().items()
+                if key not in {"video_path", "mask_h5_path", "object_mesh_path", "weights_path", "output_dir", "download_models", "overwrite"}}
     video_path, mask_h5_path, object_mesh_path, weights_path, output_dir = map(lambda value: Path(value).resolve(), (video_path, mask_h5_path, object_mesh_path, weights_path, output_dir))
     for path in (video_path, mask_h5_path, object_mesh_path):
         if not path.is_file():
@@ -98,10 +118,20 @@ def run_inference(video_path: str, mask_h5_path: str, object_mesh_path: str, wei
     sequence = video_path.name[:-len(suffix)]
     output_root = output_dir / sequence
     marker_root = output_root / ".stages"
-    marker_root.mkdir(parents=True, exist_ok=True)
     if download_models:
         download_weights(weights_path)
     weights = _required_weights(weights_path)
+    identity_inputs = {"video": video_path, "masks": mask_h5_path, "object_mesh": object_mesh_path,
+                       **{f"weight_{key}": path for key, path in weights.items()}}
+    # Include auxiliary Torch Hub checkpoints used by SAM 3D Body and CoCoNet.
+    for path in sorted((weights_path / "sam3d_body/torch_home/hub/checkpoints").glob("*.pth")):
+        identity_inputs[f"hub_{path.name}"] = path
+    source_roots = _runtime_source_roots(weights_path)
+    identity = run_identity(identity_inputs, source_roots, settings)
+    identity_path = bind_run(output_root, identity)
+    marker_root.mkdir(parents=True, exist_ok=True)
+    # An interrupted rerun must not leave an old PASS report advertising success.
+    (output_root / "pipeline_report.json").unlink(missing_ok=True)
     env = os.environ.copy()
     env.update({"PYTHONPATH": os.pathsep.join((str(SOURCE_ROOT), str(SAM3D_SOURCE_ROOT), str(Path("/workspace/v2d_foundation_pose/lib/FoundationPose")), env.get("PYTHONPATH", ""))), "HF_HOME": str(weights_path / "hf_home"), "TORCH_HOME": str(weights_path / "sam3d_body/torch_home"), "SAM3D_BODY_ROOT": str(SAM3D_SOURCE_ROOT), "MHR_ASSETS_ROOT": str(weights_path / "sam3d_body"), "FOUNDATIONPOSE_WEIGHTS_DIR": str(weights_path / "foundationpose/nvlabs_pytorch"), "OPENCV_IO_ENABLE_OPENEXR": "1", "PYOPENGL_PLATFORM": "egl", "HDF5_USE_FILE_LOCKING": "FALSE", "PYTHONUNBUFFERED": "1"})
     raw_depth = output_root / "depth/moge2/raw.npy"
@@ -156,7 +186,10 @@ def run_inference(video_path: str, mask_h5_path: str, object_mesh_path: str, wei
     render_command = [python, str(SOURCE_ROOT / "tools/render_mhr_wild_inference.py"), str(export_seq), "--source-video", str(video_path), "--object-mesh", str(aligned_object_mesh), "--before-bundle", str(coconet_bundle), "--after-bundle", str(refined_bundle), "--output", str(output_video), "--comparison-output", str(comparison_video), "--device", device, "--batch-size", str(render_batch_size)]
     _flag(render_command, overwrite, "--overwrite")
     stages.append(_stage_run("08_render", render_command, [export_marker, video_path, aligned_object_mesh, coconet_bundle, refined_bundle], [output_video, comparison_video], marker_root, env, overwrite))
+    if run_identity(identity_inputs, source_roots, settings) != identity:
+        raise ValueError("Source or inputs changed during inference; use a new output_dir")
     report = {"schema": PIPELINE_SCHEMA, "verdict": "PASS", "sequence": sequence, "checkpoint": {**_file_identity(weights["checkpoint"]), "step": 200000, "sha256": CARI4D_CHECKPOINT_SHA256, "repository": CARI4D_REVISION}, "inputs": {"video": _file_identity(video_path), "masks": _file_identity(mask_h5_path), "object_mesh": _file_identity(object_mesh_path)}, "defaults": {"depth": "moge2", "human_prompt": "sam2_bbox_mask", "foundationpose": "register_first_then_track", "coconet_supervision": "checkpoint_embedded_offline", "postopt_frames": "full_clip" if postopt_batch_size == 0 else postopt_batch_size, "postopt_steps": postopt_num_steps, "postopt_temporal_weight": postopt_temporal_weight, "postopt_human_pose_prior_weight": postopt_human_pose_prior_weight, "postopt_contact_activation_distance_m": postopt_contact_activation_distance_m}, "stages": stages, "output_video": _file_identity(output_video), "comparison_video": _file_identity(comparison_video), "output_root": str(output_root)}
+    report["run_identity"] = {"path": str(identity_path), "sha256": identity["sha256"]}
     _atomic_json(report_path, report)
     print(json.dumps(report, indent=2, sort_keys=True))
     return report_path

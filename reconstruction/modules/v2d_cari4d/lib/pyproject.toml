@@ -17,6 +17,8 @@ dependencies = [
     "v2d-common[io]",
     "v2d-moge-lib",
     "v2d-sam3d-body-lib",
+    "pandas",
+    "pyarrow",
 ]
 
 [tool.setuptools]

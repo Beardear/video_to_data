@@ -11,7 +11,7 @@ def mesh_simplify(mesh: Mesh, face_count: int | None = None, factor: float | Non
 
     Args:
         mesh: Input mesh.
-        face_count: Target number of faces. Takes priority over factor.
+        face_count: Target maximum number of faces. Takes priority over factor.
         factor: Reduction factor in (0, 1] (e.g. 0.1 = keep 10% of faces).
                 Defaults to 0.1 if neither argument is provided.
     """
@@ -25,6 +25,10 @@ def mesh_simplify(mesh: Mesh, face_count: int | None = None, factor: float | Non
     else:
         target = max(1, int(orig_faces * 0.1))
 
+    # The decimator rejects targets above the source face count. An already
+    # small mesh needs no reduction; retain geometry and appearance exactly.
+    if target >= orig_faces:
+        return mesh
     simplified = tm.simplify_quadric_decimation(face_count=target)
 
     # Re-project vertex colors onto the simplified mesh via nearest-vertex lookup.
