@@ -144,6 +144,19 @@ def test_bad_inputs_are_not_retried_and_never_reach_gpu(experiment):
     assert json.loads(path.read_text())["verdict"] == "FAIL"
 
 
+def test_resume_rejects_exports_without_added_acceleration(experiment):
+    args, calls, _, _ = experiment
+    batch.run_track1_batch(**args, execute=True, episodes=[0])
+    path = Path(args["output_dir"]) / "exports/episode_000000/episode_000000_export.json"
+    report = json.loads(path.read_text())
+    del report["conversion"]["added_acceleration"]
+    path.write_text(json.dumps(report))
+    before = list(calls)
+    result = batch.run_track1_batch(**args, execute=True, episodes=[0])
+    assert json.loads(result.read_text())["verdict"] == "FAIL"
+    assert before == calls  # Do not silently rerun or bless the unchecked files.
+
+
 @pytest.mark.parametrize("change", ["input", "weights", "config"])
 def test_changed_experiment_cannot_reuse_old_results(experiment, change):
     args, calls, _, entries = experiment

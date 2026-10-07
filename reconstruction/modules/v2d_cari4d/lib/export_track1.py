@@ -43,6 +43,7 @@ def export_track1(
     decode_batch_size: int = 16, fit_model_batch_size: int = 128,
     fit_precision: str = "float64", max_vertex_error_mm: float = 1.0,
     conversion_error_policy: str = "reject",
+    max_added_acc_h_cm: float = 0.02,
 ) -> Path:
     """Publish a new episode directory only after conversion passes its checks.
 
@@ -51,6 +52,7 @@ def export_track1(
     across source/config changes. This does not submit anything to Kaggle.
     """
     import numpy as np
+    from v2d.common.track1_conversion import track1_scoring, track1_require_acceleration
 
     if str(SOURCE_ROOT) not in sys.path:
         sys.path.insert(0, str(SOURCE_ROOT))
@@ -65,6 +67,9 @@ def export_track1(
         raise ValueError("max_vertex_error_mm must be finite and positive")
     if conversion_error_policy not in {"reject", "report"}:
         raise ValueError("conversion_error_policy must be reject or report")
+    if (type(max_added_acc_h_cm) not in (int, float) or not np.isfinite(max_added_acc_h_cm)
+            or max_added_acc_h_cm <= 0):
+        raise ValueError("max_added_acc_h_cm must be finite and positive")
     for name, value in (("business_commit", business_commit), ("image_build_commit", image_build_commit)):
         if not re.fullmatch(r"[0-9a-f]{40}", value):
             raise ValueError(f"{name} must be a full 40-character commit SHA")
@@ -81,10 +86,16 @@ def export_track1(
     converter = kit / "tools/track1/mesh_to_mhr_params.py"
     model = weights / "sam3d_body/checkpoints/sam-3d-body-dinov3/assets/mhr_model.pt"
     decoder = SOURCE_ROOT / "tools/export_track1_vertices.py"
+    acceleration_checker = SOURCE_ROOT / "tools/check_track1_acceleration.py"
+    import v2d.common.track1_conversion as conversion_contract
     inputs = {"refined_bundle": bundle, "aligned_object_mesh": mesh,
               "pipeline_report": pipeline_report, "mhr_model": model,
               "official_converter": converter, "decoder_script": decoder,
-              "adapter": Path(__file__), "export_contract": SOURCE_ROOT / "lib_mhr/track1.py"}
+              "adapter": Path(__file__), "export_contract": SOURCE_ROOT / "lib_mhr/track1.py",
+              "acceleration_checker": acceleration_checker,
+              "acceleration_contract": Path(conversion_contract.__file__),
+              "official_metrics": kit / "v2dlb/mhr_metrics.py",
+              "official_sample": kit / "data/track_1_sample_submission.parquet"}
     for path in inputs.values():
         if not path.is_file() or path.stat().st_size == 0:
             raise FileNotFoundError(f"Required export input is missing or empty: {path}")
@@ -107,6 +118,9 @@ def export_track1(
             or object_mesh.area <= 0):
         raise ValueError("Aligned mesh has no finite, nondegenerate surface")
     input_hashes = {name: _sha256(path) for name, path in inputs.items()}
+    scoring = track1_scoring(kit, episode_index, expected_frames)
+    if not scoring.centers():
+        raise ValueError("Added acceleration requires a continuous scored three-frame stretch")
     source_roots = {"cari4d_lib": Path(__file__).resolve().parent,
                     "sam3d_body_lib": SAM3D_SOURCE_ROOT}
     source_hashes = {name: _python_source_digest(root) for name, root in source_roots.items()}
@@ -138,6 +152,16 @@ def export_track1(
         destination.mkdir()
         npz = destination / f"{sequence}.npz"
         np.savez(npz, **arrays)
+        acceleration_path = work / "added_acceleration.json"
+        subprocess.run([
+            sys.executable, str(acceleration_checker), "--original-joints", str(work / "human_joints.npy"),
+            "--submission", str(npz), "--submission-kit", str(kit), "--model", str(model),
+            "--output", str(acceleration_path), "--device", device, "--episode-index", str(episode_index),
+            "--expected-frames", str(expected_frames), "--batch-size", str(decode_batch_size),
+            "--precision", fit_precision, "--threshold-cm", str(max_added_acc_h_cm),
+        ], cwd=SOURCE_ROOT, env=env, check=True)
+        acceleration = json.loads(acceleration_path.read_text())
+        track1_require_acceleration(acceleration, scoring, max_added_acc_h_cm)
         mesh_output = destination / f"{sequence}_object.glb"
         shutil.copyfile(mesh, mesh_output)
         # Reject concurrently changed inputs; do not publish mixed-version data.
@@ -157,17 +181,20 @@ def export_track1(
             "settings": {"device": device, "decode_batch_size": decode_batch_size,
                          "fit_model_batch_size": fit_model_batch_size, "fit_precision": fit_precision,
                          "max_vertex_error_mm": max_vertex_error_mm,
-                         "conversion_error_policy": conversion_error_policy},
+                         "conversion_error_policy": conversion_error_policy,
+                         "max_added_acc_h_cm": max_added_acc_h_cm},
             "acceptance": {"structural_checks": "PASS", "accepted_for_packing": True,
                            "conversion_error_policy": conversion_error_policy,
                            "within_reference_tolerance": bool(np.all(errors <= max_vertex_error_mm)),
                            "frames_above_reference_tolerance": np.flatnonzero(errors > max_vertex_error_mm).tolist(),
                            "reference_tolerance_mm": max_vertex_error_mm,
-                           "reference_tolerance_is_competition_rule": False},
+                           "reference_tolerance_is_competition_rule": False,
+                           "added_acceleration_check": "PASS"},
             "conversion": {"method": "official_mesh_to_mhr_params", "report": fit_report,
                            "per_frame_mean_vertex_error_mm": errors.tolist(),
                            "mean_vertex_error_mm": float(errors.mean()),
                            "worst_frame_mean_vertex_error_mm": float(errors.max()),
+                           "added_acceleration": acceleration,
                            "identity_policy": "one fitted shape and scale vector per episode"},
             "coordinates": "CARI4D wild camera/world, metres; no extra flip or scaling",
             "object_scale": 1.0, "kaggle_scored": False,
@@ -201,6 +228,8 @@ def _parser() -> argparse.ArgumentParser:
                         help="Reference tolerance for per-frame mean conversion displacement, in mm")
     parser.add_argument("--conversion_error_policy", choices=("reject", "report"), default="reject",
                         help="Reject above the reference tolerance, or publish with the measured errors recorded")
+    parser.add_argument("--max_added_acc_h_cm", type=float, default=0.02,
+                        help="Require conversion-added joint acceleration below this value in cm/frame^2")
     return parser
 
 

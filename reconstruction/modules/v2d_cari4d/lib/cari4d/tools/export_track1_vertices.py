@@ -33,20 +33,27 @@ def main() -> None:
     decoder_identity = layer.decoder_identity()
     vertices = np.lib.format.open_memmap(output / "human_vertices.npy", mode="w+",
                                          dtype=np.float32, shape=(args.expected_frames, 18439, 3))
+    joints = np.empty((args.expected_frames, 127, 3), dtype=np.float32)
     with torch.inference_mode():
         for start in range(0, args.expected_frames, args.batch_size):
             stop = min(start + args.batch_size, args.expected_frames)
             params = {key: torch.as_tensor(bundle["pr"][key][start:stop],
                                           device=args.device, dtype=torch.float32)
                       for key in MHR_PARAM_DIMS}
-            decoded = layer.mhr_forward_vertices(params).detach().cpu().numpy()
+            body = layer.mhr_forward(params)
+            decoded = body.vertices.detach().cpu().numpy()
+            decoded_joints = body.joints.detach().cpu().numpy()
             if decoded.shape != (stop - start, 18439, 3) or not np.isfinite(decoded).all():
                 raise ValueError(f"Invalid lod1 MHR vertices at frames {start}:{stop}")
             # Already in the same metre/axis convention as the official fitter:
             # diag(1,-1,-1) @ MHR(...)/100 + mhr_trans. No second flip or scaling.
             vertices[start:stop] = decoded
+            if decoded_joints.shape != (stop - start, 127, 3) or not np.isfinite(decoded_joints).all():
+                raise ValueError(f"Invalid MHR joints at frames {start}:{stop}")
+            joints[start:stop] = decoded_joints
     vertices.flush()
     del vertices
+    np.save(output / "human_joints.npy", joints)
     np.savez(output / "object_motion.npz", rotation=motion.rotation, translation=motion.translation)
     if layer.decoder_identity() != decoder_identity:
         raise ValueError("MHR decoder assets changed while decoding")

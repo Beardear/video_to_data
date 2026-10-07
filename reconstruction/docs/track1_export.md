@@ -62,8 +62,8 @@ If the image predates this adapter, execute the checked-out
 `reconstruction/modules/v2d_cari4d/lib/export_track1.py` with these same flags.
 Simply cloning the branch does not change the installed Python package.
 
-The decoder and fitter run in separate processes so decoder VRAM is released
-before fitting. `--decode_batch_size` defaults to 16, `--fit_model_batch_size`
+The decoder, fitter and added-acceleration check run in separate processes so
+their model allocations do not overlap. `--decode_batch_size` defaults to 16, `--fit_model_batch_size`
 to 128, and `--fit_precision` to `float64`. The fitting time is additional to
 the original eight-stage reconstruction time.
 
@@ -86,6 +86,35 @@ existing official fitting algorithm while deferring conversion-precision
 optimization. Both modes reject invalid/omitted frames, malformed dimensions,
 non-finite or negative errors, and invalid object motion. No threshold is an
 estimate of Kaggle score loss, and successful packing is not an accuracy result.
+
+### Conversion-added acceleration
+
+Every export also checks the 22 joints selected by the kit's
+`MHR_TABLE3_BODY_JOINT_INDICES`, using its sample Parquet for scored frames.
+The source decoder preserves each frame's original identity; after fitting,
+the official MHR model decodes the **actual float32 submission arrays** with
+their fixed identity. Both joint arrays use the same world frame in metres.
+
+For residual `d = converted_joints - original_joints`, the diagnostic is
+`100 * mean(norm(d[t+1] - 2*d[t] + d[t-1]))`, in **cm/frame²**. It uses only
+triplets within continuous scored stretches, averages over all 22 joints and
+valid triplets, and never bridges gaps. Short stretches are recorded but
+skipped; no evaluable triplets is an error, not a zero-error pass. There is no
+FPS² scaling, alignment to ground truth, or smoothing.
+
+`--max_added_acc_h_cm` defaults to **0.02**, with strict `<` acceptance. This is
+a reviewer-proposed engineering gate, **not** the official ACC-H score or a
+competition threshold. It applies independently of the vertex-error `report`
+policy. Exceedance prevents publication and retains `added_acceleration.json`,
+`human_joints.npy` and converted-joint diagnostics in the work directory.
+Successful export reports include `conversion.added_acceleration`, with
+`added_acc_h_cm`, center frames, per-frame means, per-stretch summaries and the
+threshold verdict. The kit's scoring sources and roster are hashed; packing
+and batch resume reject missing, inconsistent or failing checks.
+
+The runtime needs the updated `v2d-common` plus pandas/PyArrow to read the
+official roster. CPU arithmetic and orchestration tests do not replace a real
+episode 16 measurement using the source bundle, MHR assets and fitted results.
 
 A successful export contains:
 

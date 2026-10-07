@@ -19,6 +19,7 @@ import time
 from typing import Any
 
 from v2d.common.artifacts import artifact_lock, artifact_record, atomic_json
+from v2d.common.track1_conversion import track1_scoring
 from v2d.pipelines.track1_pack import _accepted_export
 from v2d.pipelines.track1_preflight import (
     INPUT_ROLES, Track1Episode, track1_episodes, track1_metadata_identity, track1_prepared_inputs,
@@ -116,8 +117,9 @@ def _validate_report(output: Path, episode: Track1Episode) -> None:
 
 
 def _accept_export(exports: Path, episode: Track1Episode, settings: BaselineSettings,
-                   versions: dict[str, str]) -> None:
-    accepted = _accepted_export(exports, episode, versions["business_commit"])
+                   versions: dict[str, str], kit: Path) -> None:
+    accepted = _accepted_export(exports, episode, versions["business_commit"],
+                               track1_scoring(kit, episode.episode_index, episode.expected_frames))
     expected_inference = {key: value for key, value in settings.inference.items() if key != "download_models"}
     if (any(accepted.provenance[name] != value for name, value in versions.items())
             or accepted.provenance["settings"] != settings.export
@@ -203,7 +205,9 @@ def run_track1_batch(
                 "metadata": track1_metadata_identity(dataset)} != initial:
                 raise ValueError("Batch configuration or metadata changed while reading it")
             paths = {"inputs_manifest": manifest, "config": config,
-                     "official_converter": kit / "tools/track1/mesh_to_mhr_params.py"}
+                     "official_converter": kit / "tools/track1/mesh_to_mhr_params.py",
+                     "official_metrics": kit / "v2dlb/mhr_metrics.py",
+                     "official_sample": kit / "data/track_1_sample_submission.parquet"}
             for index, entry in prepared.items():
                 paths.update({f"episode_{index}_{role}": path for role, path in entry.items()})
             paths.update({f"source_video_{i}": e.source_video for i, e in metadata.items()})
@@ -255,7 +259,7 @@ def run_track1_batch(
                                 raise FileNotFoundError(path)
                         exports = output / "exports"
                         if (exports / f"episode_{index:06d}").exists():
-                            _accept_export(exports, episode, settings, versions)
+                            _accept_export(exports, episode, settings, versions, kit)
                             attempt.update(status="PASS", stage="reuse", reused=True)
                         else:
                             for invocation in _commands(episode, paths, output, weights, kit, runtime, settings,
@@ -265,7 +269,7 @@ def run_track1_batch(
                                 runtime.execute(invocation, stage_timeout_seconds)
                                 if invocation.name == "validate":
                                     _validate_report(output, episode)
-                            _accept_export(exports, episode, settings, versions)
+                            _accept_export(exports, episode, settings, versions, kit)
                             attempt.update(status="PASS", reused=False)
                         row["status"] = "PASS"
                     except (OSError, ValueError, KeyError, subprocess.SubprocessError) as error:

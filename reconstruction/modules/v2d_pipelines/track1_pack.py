@@ -20,6 +20,7 @@ import tempfile
 from typing import Any
 
 from v2d.common.artifacts import artifact_record, atomic_json
+from v2d.common.track1_conversion import Track1Scoring, track1_body_joint_indices, track1_require_acceleration
 from v2d.pipelines.track1_preflight import Track1Episode, track1_episodes, track1_metadata_identity
 
 
@@ -33,7 +34,7 @@ class AcceptedExport:
     identities: dict[str, dict[str, Any]]
 
 
-def _accepted_export(root: Path, episode: Track1Episode, commit: str) -> AcceptedExport:
+def _accepted_export(root: Path, episode: Track1Episode, commit: str, scoring: Track1Scoring) -> AcceptedExport:
     import numpy as np
 
     sequence = f"episode_{episode.episode_index:06d}"
@@ -52,6 +53,10 @@ def _accepted_export(root: Path, episode: Track1Episode, commit: str) -> Accepte
         if report.get("output_sha256", {}).get(paths[name].name) != identities[name]["sha256"]:
             raise ValueError(f"{sequence}: {name} changed after export")
     settings = report.get("settings", {})
+    acceleration = report.get("conversion", {}).get("added_acceleration", {})
+    track1_require_acceleration(acceleration, scoring, settings.get("max_added_acc_h_cm"))
+    if acceptance.get("added_acceleration_check") != "PASS":
+        raise ValueError(f"{sequence}: added acceleration was not accepted")
     policy = settings.get("conversion_error_policy")
     threshold = settings.get("max_vertex_error_mm")
     errors = np.asarray(report.get("conversion", {}).get("per_frame_mean_vertex_error_mm"), dtype=float)
@@ -81,7 +86,7 @@ def _accepted_export(root: Path, episode: Track1Episode, commit: str) -> Accepte
     if inference.get("expected_frames") not in (None, episode.expected_frames):
         raise ValueError(f"{sequence}: inference frame count disagrees with dataset metadata")
     provenance["inference_settings"] = {key: value for key, value in inference.items() if key != "expected_frames"}
-    for name in ("official_converter", "mhr_model"):
+    for name in ("official_converter", "mhr_model", "official_metrics", "official_sample", "acceleration_contract"):
         provenance[f"{name}_sha256"] = report["input_sha256"][name]
     return AcceptedExport(episode.episode_index, paths["npz"], paths["mesh"], paths["report"],
                           provenance, identities)
@@ -130,12 +135,18 @@ def pack_track1(dataset_root: str, export_root: str, submission_kit: str, output
         frames = keys.loc[(keys[0] == index) & (keys[1] != 999999), 1]
         if frames.empty or frames.max() >= metadata[index].expected_frames:
             raise ValueError(f"episode {index}: official scored frames exceed dataset metadata")
-    accepted = [_accepted_export(exports, metadata[i], match.group(1)) for i in sorted(selected)]
+    joint_indices = track1_body_joint_indices(kit / "v2dlb/mhr_metrics.py")
+    accepted = [_accepted_export(exports, metadata[i], match.group(1), Track1Scoring(
+        joint_indices, tuple(sorted(set(keys.loc[(keys[0] == i) & (keys[2] == 0), 1])))))
+        for i in sorted(selected)]
     if any(item.provenance != accepted[0].provenance for item in accepted[1:]):
         raise ValueError("Exports mix business/image versions, converter sources, or export settings")
     converter_hash = artifact_record(kit / "tools/track1/mesh_to_mhr_params.py")["sha256"]
     if accepted[0].provenance["official_converter_sha256"] != converter_hash:
         raise ValueError("Exported fits and the requested submission kit use different converter sources")
+    for name, path in (("official_metrics", kit / "v2dlb/mhr_metrics.py"), ("official_sample", sample_path)):
+        if accepted[0].provenance[f"{name}_sha256"] != artifact_record(path)["sha256"]:
+            raise ValueError("Added-acceleration check and packing use different official scoring contracts")
     kit_identity = _kit_identity(kit)
     output.parent.mkdir(parents=True, exist_ok=True)
     work = Path(tempfile.mkdtemp(prefix=f".{output.name}-", dir=output.parent))

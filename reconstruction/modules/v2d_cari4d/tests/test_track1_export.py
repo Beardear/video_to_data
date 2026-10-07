@@ -11,8 +11,10 @@ import subprocess
 import sys
 
 import numpy as np
+import pandas as pd
 import pytest
 import trimesh
+from v2d.common.track1_conversion import track1_added_acceleration, track1_scoring
 
 
 MODULE = Path(__file__).resolve().parents[1]
@@ -119,6 +121,12 @@ def export_inputs(tmp_path, monkeypatch):
     kit = tmp_path / "kit"
     (kit / "tools/track1").mkdir(parents=True)
     (kit / "tools/track1/mesh_to_mhr_params.py").write_text("# converter fixture\n")
+    (kit / "v2dlb").mkdir()
+    (kit / "v2dlb/mhr_metrics.py").write_text(f"MHR_TABLE3_BODY_JOINT_INDICES = {tuple(range(22))!r}\n")
+    (kit / "data").mkdir()
+    pd.DataFrame({"row_id": [f"t1_000016_{frame:06d}_{role}_000000"
+                             for frame in range(3) for role in (0, 3, 4)]}).to_parquet(
+        kit / "data/track_1_sample_submission.parquet", index=False)
     weights = tmp_path / "weights"
     model = weights / "sam3d_body/checkpoints/sam-3d-body-dinov3/assets/mhr_model.pt"
     model.parent.mkdir(parents=True)
@@ -134,11 +142,24 @@ def simulate_children(command, **kwargs):
     out = Path(command[command.index("--output") + 1])
     if command[1].endswith("export_track1_vertices.py"):
         np.save(out / "human_vertices.npy", np.zeros((3, 18439, 3), np.float32))
+        np.save(out / "human_joints.npy", np.zeros((3, 127, 3), np.float32))
         motion = track1_validate_bundle(bundle(), 3)
         np.savez(out / "object_motion.npz", rotation=motion.rotation, translation=motion.translation)
         (out / "decoder.json").write_text('{"test_fixture": true}')
-    else:
+    elif command[1].endswith("mesh_to_mhr_params.py"):
         np.savez(out, **fitted())
+    elif command[1].endswith("check_track1_acceleration.py"):
+        argument = lambda key: command[command.index(key) + 1]
+        with np.load(argument("--submission"), allow_pickle=False) as arrays:
+            assert arrays["pose"].dtype == np.float32
+            assert set(arrays.files) == {"pose", "shape", "scales", "object_rotation", "object_translation", "object_scale"}
+        original = np.load(argument("--original-joints"), allow_pickle=False)
+        scoring = track1_scoring(Path(argument("--submission-kit")), 16, 3)
+        report = track1_added_acceleration(original, original, scoring,
+                                          threshold_cm=float(argument("--threshold-cm")))
+        out.write_text(json.dumps(report))
+    else:
+        pytest.fail(f"Unexpected subprocess: {command}")
 
 
 def test_publish_and_refuse_reuse(export_inputs, monkeypatch):
@@ -150,6 +171,8 @@ def test_publish_and_refuse_reuse(export_inputs, monkeypatch):
     assert report["kaggle_scored"] is False
     assert "official_converter" in report["input_sha256"]
     assert len(report["conversion"]["per_frame_mean_vertex_error_mm"]) == 3
+    assert report["conversion"]["added_acceleration"]["added_acc_h_cm"] == 0
+    assert report["acceptance"]["added_acceleration_check"] == "PASS"
     with pytest.raises(FileExistsError):
         adapter.export_track1(**export_inputs)
 
@@ -239,6 +262,49 @@ def test_changed_source_during_export_is_rejected(export_inputs, monkeypatch):
     with pytest.raises(ValueError, match="input changed"):
         adapter.export_track1(**export_inputs)
     assert not Path(export_inputs["output_dir"]).exists()
+
+
+def test_added_acceleration_failure_is_not_bypassed_by_report_policy(export_inputs, monkeypatch):
+    from v2d.common.track1_conversion import track1_acceleration_summary
+
+    def jitter(command, **kwargs):
+        simulate_children(command, **kwargs)
+        if command[1].endswith("check_track1_acceleration.py"):
+            scoring = track1_scoring(Path(export_inputs["submission_kit"]), 16, 3)
+            output = Path(command[command.index("--output") + 1])
+            output.write_text(json.dumps(track1_acceleration_summary([0.021], scoring, 0.02)))
+    monkeypatch.setattr(adapter.subprocess, "run", jitter)
+    with pytest.raises(ValueError, match="Added acceleration"):
+        adapter.export_track1(**export_inputs, conversion_error_policy="report")
+    destination = Path(export_inputs["output_dir"])
+    assert not destination.exists()
+    diagnostics = list(destination.parent.glob(".export-*/added_acceleration.json"))
+    assert len(diagnostics) == 1
+    assert json.loads(diagnostics[0].read_text())["added_acc_h_cm"] == pytest.approx(0.021)
+
+
+def test_changed_official_scoring_source_is_rejected(export_inputs, monkeypatch):
+    def mutate(command, **kwargs):
+        simulate_children(command, **kwargs)
+        if command[1].endswith("check_track1_acceleration.py"):
+            path = Path(export_inputs["submission_kit"], "v2dlb/mhr_metrics.py")
+            path.write_text(path.read_text() + "# changed source\n")
+    monkeypatch.setattr(adapter.subprocess, "run", mutate)
+    with pytest.raises(ValueError, match="input changed"):
+        adapter.export_track1(**export_inputs)
+    assert not Path(export_inputs["output_dir"]).exists()
+
+
+def test_short_scoring_span_fails_before_model_work(export_inputs, monkeypatch):
+    path = Path(export_inputs["submission_kit"], "data/track_1_sample_submission.parquet")
+    table = pd.read_parquet(path)
+    table = table.loc[~table.row_id.str.contains("_000002_")]
+    table.to_parquet(path, index=False)
+    def unexpected(*args, **kwargs):
+        pytest.fail("Must validate scored triplets before starting models")
+    monkeypatch.setattr(adapter.subprocess, "run", unexpected)
+    with pytest.raises(ValueError, match="three-frame"):
+        adapter.export_track1(**export_inputs)
 
 
 def test_wrapper_signature_defaults_and_cli_match_library():
