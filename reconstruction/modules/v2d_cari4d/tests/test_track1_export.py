@@ -173,6 +173,7 @@ def test_publish_and_refuse_reuse(export_inputs, monkeypatch):
     assert len(report["conversion"]["per_frame_mean_vertex_error_mm"]) == 3
     assert report["conversion"]["added_acceleration"]["added_acc_h_cm"] == 0
     assert report["acceptance"]["added_acceleration_check"] == "PASS"
+    assert report["conversion"]["vertex_spikes"]["no_scored_spikes"] is True
     with pytest.raises(FileExistsError):
         adapter.export_track1(**export_inputs)
 
@@ -200,6 +201,9 @@ def test_excessive_fit_error_keeps_diagnostics_without_publishing(export_inputs,
     destination = Path(export_inputs["output_dir"])
     assert not destination.exists()
     assert len(list(destination.parent.glob(".export-*/human_fit.npz"))) == 1
+    spikes = list(destination.parent.glob(".export-*/vertex_spikes.json"))
+    assert len(spikes) == 1
+    assert json.loads(spikes[0].read_text())["policy"] == "report_only"
 
 
 def test_report_policy_publishes_with_explicit_error_acceptance(export_inputs, monkeypatch):
@@ -220,6 +224,8 @@ def test_report_policy_publishes_with_explicit_error_acceptance(export_inputs, m
     assert acceptance["within_reference_tolerance"] is False
     assert acceptance["reference_tolerance_is_competition_rule"] is False
     assert report["conversion"]["worst_frame_mean_vertex_error_mm"] == pytest.approx(2.36)
+    assert report["conversion"]["vertex_spikes"]["scored_spike_frames"] == [1]
+    assert report["conversion"]["vertex_spikes"]["no_scored_spikes"] is False
     assert report["kaggle_scored"] is False
 
 

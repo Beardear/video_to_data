@@ -112,6 +112,15 @@ Successful export reports include `conversion.added_acceleration`, with
 threshold verdict. The kit's scoring sources and roster are hashed; packing
 and batch resume reject missing, inconsistent or failing checks.
 
+`conversion.vertex_spikes` additionally reports frames whose mean vertex error
+is **both >3× the median of the ±5 neighboring frames (excluding itself) and
+>1 mm**. Windows use the original timeline, clipped at episode boundaries.
+The report records local medians, all `spike_frames`, `scored_spike_frames`,
+their counts and `no_scored_spikes`, using the official scored-frame roster.
+This is a reviewer-proposed diagnostic only: it does not smooth results or add
+another publication gate. On later validation failure, `vertex_spikes.json`
+remains in the work directory for inspection.
+
 The runtime needs the updated `v2d-common` plus pandas/PyArrow to read the
 official roster. CPU arithmetic and orchestration tests do not replace a real
 episode 16 measurement using the source bundle, MHR assets and fitted results.

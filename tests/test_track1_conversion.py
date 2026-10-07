@@ -8,7 +8,7 @@ import pytest
 
 from v2d.common.track1_conversion import (
     Track1Scoring, track1_added_acceleration, track1_acceleration_summary,
-    track1_require_acceleration, track1_scoring,
+    track1_require_acceleration, track1_scoring, track1_vertex_spikes,
 )
 
 
@@ -118,3 +118,46 @@ def test_real_kit_episode16_selects_official_22_joints_and_scored_span(tmp_path)
     assert scoring.centers() == list(range(51, 289))
     with pytest.raises(ValueError, match="exceed"):
         track1_scoring(kit, 16, 289)
+
+
+def test_spikes_distinguish_scored_and_unscored_frames():
+    errors = np.full(21, 0.2)
+    errors[[0, 10, 20]] = 2
+    report = track1_vertex_spikes(errors, Track1Scoring(INDICES, tuple(range(5, 16))))
+    assert report["spike_frames"] == [0, 10, 20]
+    assert report["scored_spike_frames"] == [10]
+    assert report["unscored_spike_frames"] == [0, 20]
+    assert report["scored_spike_count"] == 1
+    assert report["no_scored_spikes"] is False
+    assert report["policy"] == "report_only"
+    np.testing.assert_allclose(np.asarray(report["local_median_mm"])[[0, 10, 20]], 0.2)
+
+
+@pytest.mark.parametrize("background,peak,detected", [(0.5, 1.5, False), (0.5, 1.51, True),
+                                                     (0.2, 1.0, False), (0.2, 1.01, True),
+                                                     (0.0, 1.01, True)])
+def test_spike_requires_both_strict_thresholds(background, peak, detected):
+    errors = np.full(11, background)
+    errors[5] = peak
+    report = track1_vertex_spikes(errors, Track1Scoring(INDICES, tuple(range(11))))
+    assert report["spike_frames"] == ([5] if detected else [])
+
+
+def test_spike_window_excludes_center_and_includes_unscored_neighbors():
+    # The scored frame can use its unscored neighbor; including itself would
+    # incorrectly raise the median to 1.1 mm and hide this spike.
+    report = track1_vertex_spikes([2, 0.2], Track1Scoring(INDICES, (0,)))
+    assert report["local_median_mm"] == [0.2, 2.0]
+    assert report["scored_spike_frames"] == [0]
+
+
+def test_sustained_error_is_not_a_local_spike():
+    report = track1_vertex_spikes(np.full(15, 2.0), Track1Scoring(INDICES, tuple(range(15))))
+    assert report["spike_frames"] == []
+    assert report["no_scored_spikes"] is True
+
+
+@pytest.mark.parametrize("errors", [[0], [0, np.nan, 0], [0, np.inf, 0], [0, -1, 0], [[0, 0, 0]]])
+def test_invalid_spike_errors_cannot_be_reported_as_clear(errors):
+    with pytest.raises(ValueError, match="Spikes require"):
+        track1_vertex_spikes(errors, Track1Scoring(INDICES, (0, 1, 2)))

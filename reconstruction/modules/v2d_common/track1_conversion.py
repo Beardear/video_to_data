@@ -130,3 +130,35 @@ def track1_require_acceleration(
     if not expected["within_threshold"]:
         raise ValueError(f"Added acceleration {expected['added_acc_h_cm']:.6g} cm/frame^2 "
                          f"must be below {threshold_cm:g}; inspect conversion before publishing")
+
+
+def track1_vertex_spikes(per_frame_error_mm: Any, scoring: Track1Scoring) -> dict[str, Any]:
+    """Report reviewer-defined vertex-error spikes; does not gate publication.
+
+    Use original frame indices and up to five neighbors on each side, excluding
+    the frame itself. Neighbors outside the scored span still provide context;
+    report separately which detected spikes fall inside the scored frames.
+    """
+    errors = np.asarray(per_frame_error_mm, dtype=np.float64)
+    if (errors.ndim != 1 or len(errors) < 2 or scoring.frames[-1] >= len(errors)
+            or not np.isfinite(errors).all() or (errors < 0).any()):
+        raise ValueError("Spikes require finite nonnegative errors for the full scored timeline and neighbors")
+    window, ratio, floor_mm = 5, 3.0, 1.0
+    medians = np.asarray([
+        np.median(np.concatenate((errors[max(0, t - window):t], errors[t + 1:t + window + 1])))
+        for t in range(len(errors))
+    ])
+    spikes = np.flatnonzero((errors > ratio * medians) & (errors > floor_mm)).tolist()
+    scored = set(scoring.frames)
+    scored_spikes = [t for t in spikes if t in scored]
+    return {"schema": "v2d.track1.vertex_spikes.v1", "units": "mm",
+            "policy": "report_only", "threshold_is_competition_rule": False,
+            "definition": "error > 3 * neighbor_median AND error > 1 mm",
+            "window_radius_frames": window, "exclude_center": True,
+            "neighbors": "full_original_timeline_clipped_at_episode_boundaries",
+            "ratio": ratio, "floor_mm": floor_mm, "comparison": ">",
+            "local_median_mm": medians.tolist(), "scored_frames": list(scoring.frames),
+            "spike_frames": spikes, "spike_count": len(spikes),
+            "scored_spike_frames": scored_spikes, "scored_spike_count": len(scored_spikes),
+            "unscored_spike_frames": [t for t in spikes if t not in scored],
+            "no_scored_spikes": not scored_spikes}

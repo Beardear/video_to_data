@@ -52,7 +52,8 @@ def export_track1(
     across source/config changes. This does not submit anything to Kaggle.
     """
     import numpy as np
-    from v2d.common.track1_conversion import track1_scoring, track1_require_acceleration
+    from v2d.common.artifacts import atomic_json
+    from v2d.common.track1_conversion import track1_scoring, track1_require_acceleration, track1_vertex_spikes
 
     if str(SOURCE_ROOT) not in sys.path:
         sys.path.insert(0, str(SOURCE_ROOT))
@@ -142,12 +143,15 @@ def export_track1(
                        "--precision", fit_precision, "--model-batch", str(fit_model_batch_size)]
         subprocess.run(fit_command, cwd=kit, env=env, check=True)
         with np.load(work / "human_fit.npz", allow_pickle=False) as fitted:
+            errors = fitted["per_frame_vertex_error_mm"].copy()
+            spikes = track1_vertex_spikes(errors, scoring)
+            # Keep the diagnostic even if vertex/acceleration acceptance fails.
+            atomic_json(work / "vertex_spikes.json", spikes)
             with np.load(work / "object_motion.npz", allow_pickle=False) as motion:
                 arrays = track1_submission_arrays(fitted, Track1ObjectMotion(
                     motion["rotation"], motion["translation"]), max_vertex_error_mm=max_vertex_error_mm,
                     conversion_error_policy=conversion_error_policy)
             fit_report = json.loads(str(fitted["report"].item()))
-            errors = fitted["per_frame_vertex_error_mm"].copy()
         destination = work / "published"
         destination.mkdir()
         npz = destination / f"{sequence}.npz"
@@ -195,6 +199,7 @@ def export_track1(
                            "mean_vertex_error_mm": float(errors.mean()),
                            "worst_frame_mean_vertex_error_mm": float(errors.max()),
                            "added_acceleration": acceleration,
+                           "vertex_spikes": spikes,
                            "identity_policy": "one fitted shape and scale vector per episode"},
             "coordinates": "CARI4D wild camera/world, metres; no extra flip or scaling",
             "object_scale": 1.0, "kaggle_scored": False,
